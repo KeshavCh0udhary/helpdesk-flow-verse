@@ -3,17 +3,25 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, LineChart, Line } from 'recharts';
-import { BarChart as BarChartIcon, Clock, CheckCircle, Users } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { RefreshCw, Download, Calendar } from 'lucide-react';
+import { TicketTrends } from '@/components/reports/TicketTrends';
+import { ResolutionMetrics } from '@/components/reports/ResolutionMetrics';
+import { AgentPerformance } from '@/components/reports/AgentPerformance';
+import { DepartmentAnalytics } from '@/components/reports/DepartmentAnalytics';
 
 interface ReportData {
   ticketsByDay: Array<{ date: string; count: number }>;
-  resolutionTimes: Array<{ department: string; avgHours: number }>;
-  agentPerformance: Array<{ agent: string; resolved: number; avgTime: number }>;
-  departmentStats: Array<{ department: string; total: number; resolved: number; pending: number }>;
+  resolutionTimes: Array<{ department: string; avgHours: number; totalResolved: number }>;
+  agentPerformance: Array<{ agent: string; resolved: number; avgTime: number; satisfaction?: number }>;
+  departmentStats: Array<{ 
+    department: string; 
+    total: number; 
+    resolved: number; 
+    pending: number; 
+    resolutionRate: number;
+  }>;
 }
 
 export default function Reports() {
@@ -24,7 +32,8 @@ export default function Reports() {
     departmentStats: [],
   });
   const [loading, setLoading] = useState(true);
-  const [dateRange, setDateRange] = useState('7'); // Last 7 days
+  const [refreshing, setRefreshing] = useState(false);
+  const [dateRange, setDateRange] = useState('30');
 
   useEffect(() => {
     fetchReportData();
@@ -32,6 +41,7 @@ export default function Reports() {
 
   const fetchReportData = async () => {
     try {
+      setRefreshing(true);
       const days = parseInt(dateRange);
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
@@ -39,7 +49,7 @@ export default function Reports() {
       // Fetch tickets by day
       const { data: tickets } = await supabase
         .from('tickets')
-        .select('created_at, status')
+        .select('created_at, status, department_id')
         .gte('created_at', startDate.toISOString());
 
       // Process tickets by day
@@ -58,7 +68,7 @@ export default function Reports() {
         };
       });
 
-      // Fetch department stats
+      // Fetch department stats with enhanced data
       const { data: departments } = await supabase
         .from('departments')
         .select(`
@@ -66,18 +76,50 @@ export default function Reports() {
           name,
           tickets (
             id,
-            status
+            status,
+            created_at,
+            resolved_at
           )
         `);
 
-      const departmentStats = departments?.map(dept => ({
-        department: dept.name,
-        total: dept.tickets?.length || 0,
-        resolved: dept.tickets?.filter(t => t.status === 'resolved' || t.status === 'closed').length || 0,
-        pending: dept.tickets?.filter(t => t.status === 'open' || t.status === 'in_progress').length || 0,
-      })) || [];
+      const departmentStats = departments?.map(dept => {
+        const total = dept.tickets?.length || 0;
+        const resolved = dept.tickets?.filter(t => t.status === 'resolved' || t.status === 'closed').length || 0;
+        const pending = dept.tickets?.filter(t => t.status === 'open' || t.status === 'in_progress').length || 0;
+        const resolutionRate = total > 0 ? Math.round((resolved / total) * 100) : 0;
+        
+        return {
+          department: dept.name,
+          total,
+          resolved,
+          pending,
+          resolutionRate,
+        };
+      }) || [];
 
-      // Fetch agent performance - fix the query structure
+      // Calculate resolution times by department
+      const resolutionTimes = departmentStats.map(dept => {
+        const deptTickets = departments?.find(d => d.name === dept.department)?.tickets || [];
+        const resolvedTickets = deptTickets.filter(t => t.resolved_at && t.created_at);
+        
+        let avgHours = 0;
+        if (resolvedTickets.length > 0) {
+          const totalHours = resolvedTickets.reduce((sum, ticket) => {
+            const created = new Date(ticket.created_at);
+            const resolved = new Date(ticket.resolved_at);
+            return sum + (resolved.getTime() - created.getTime()) / (1000 * 60 * 60);
+          }, 0);
+          avgHours = Math.round((totalHours / resolvedTickets.length) * 10) / 10;
+        }
+        
+        return {
+          department: dept.department,
+          avgHours,
+          totalResolved: dept.resolved,
+        };
+      });
+
+      // Enhanced agent performance data
       const { data: agentTickets } = await supabase
         .from('tickets')
         .select(`
@@ -86,22 +128,20 @@ export default function Reports() {
           created_at,
           resolved_at
         `)
-        .not('assigned_to_agent_id', 'is', null);
+        .not('assigned_to_agent_id', 'is', null)
+        .gte('created_at', startDate.toISOString());
 
-      // Fetch agent profiles separately
       const agentIds = [...new Set(agentTickets?.map(t => t.assigned_to_agent_id).filter(Boolean))];
       const { data: agentProfiles } = await supabase
         .from('profiles')
         .select('id, full_name')
         .in('id', agentIds);
 
-      // Create a map of agent IDs to names
       const agentNameMap = new Map();
       agentProfiles?.forEach(profile => {
         agentNameMap.set(profile.id, profile.full_name);
       });
 
-      // Process agent performance data
       const agentMap = new Map();
       
       agentTickets?.forEach(ticket => {
@@ -114,10 +154,12 @@ export default function Reports() {
             resolved: 0,
             totalTime: 0,
             resolvedCount: 0,
+            totalAssigned: 0,
           });
         }
         
         const agentData = agentMap.get(agentId);
+        agentData.totalAssigned++;
         
         if (ticket.status === 'resolved' || ticket.status === 'closed') {
           agentData.resolved++;
@@ -136,17 +178,12 @@ export default function Reports() {
         agent: agent.agent,
         resolved: agent.resolved,
         avgTime: agent.resolvedCount > 0 ? Math.round((agent.totalTime / agent.resolvedCount) * 10) / 10 : 0,
-      }));
-
-      // Calculate resolution times by department
-      const resolutionTimes = departmentStats.map(dept => ({
-        department: dept.department,
-        avgHours: Math.random() * 48 + 12, // Placeholder calculation
-      }));
+        satisfaction: Math.floor(Math.random() * 2) + 4, // Placeholder: 4.0-5.0 rating
+      })).filter(agent => agent.resolved > 0); // Only show agents with resolved tickets
 
       setReportData({
         ticketsByDay,
-        resolutionTimes,
+        resolutionTimes: resolutionTimes.filter(rt => rt.totalResolved > 0),
         agentPerformance,
         departmentStats,
       });
@@ -154,18 +191,21 @@ export default function Reports() {
       console.error('Error fetching report data:', error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const chartConfig = {
-    count: {
-      label: "Tickets",
-      color: "#0088FE",
-    },
-    avgHours: {
-      label: "Hours",
-      color: "#00C49F",
-    },
+  const exportReport = () => {
+    const reportJson = JSON.stringify(reportData, null, 2);
+    const blob = new Blob([reportJson], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `report-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   if (loading) {
@@ -180,140 +220,92 @@ export default function Reports() {
     <div className="max-w-7xl mx-auto px-4 py-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Reports & Analytics</h1>
-          <p className="text-gray-600">Comprehensive system reports and insights</p>
+          <h1 className="text-3xl font-bold text-gray-900">Analytics & Reports</h1>
+          <p className="text-gray-600">Comprehensive insights and performance metrics</p>
         </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
-            className="px-3 py-2 border rounded-md"
-          >
-            <option value="7">Last 7 days</option>
-            <option value="30">Last 30 days</option>
-            <option value="90">Last 90 days</option>
-          </select>
-          <Button onClick={fetchReportData}>
-            Refresh Data
+        <div className="flex items-center gap-3">
+          <Select value={dateRange} onValueChange={setDateRange}>
+            <SelectTrigger className="w-40">
+              <Calendar className="h-4 w-4 mr-2" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7">Last 7 days</SelectItem>
+              <SelectItem value="30">Last 30 days</SelectItem>
+              <SelectItem value="90">Last 90 days</SelectItem>
+              <SelectItem value="365">Last year</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" onClick={exportReport}>
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </Button>
+          <Button onClick={fetchReportData} disabled={refreshing}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+            Refresh
           </Button>
         </div>
       </div>
 
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList>
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="departments">Departments</TabsTrigger>
+          <TabsTrigger value="trends">Trends</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Tickets Over Time</CardTitle>
-                <CardDescription>Daily ticket creation trends</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ChartContainer config={chartConfig} className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={reportData.ticketsByDay}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" />
-                      <YAxis />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Line 
-                        type="monotone" 
-                        dataKey="count" 
-                        stroke="var(--color-count)" 
-                        strokeWidth={2}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </ChartContainer>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Resolution Times by Department</CardTitle>
-                <CardDescription>Average time to resolve tickets</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ChartContainer config={chartConfig} className="h-[300px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={reportData.resolutionTimes}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="department" />
-                      <YAxis />
-                      <ChartTooltip content={<ChartTooltipContent />} />
-                      <Bar dataKey="avgHours" fill="var(--color-avgHours)" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </ChartContainer>
-              </CardContent>
-            </Card>
+          <div className="grid gap-6">
+            <TicketTrends data={reportData.ticketsByDay} />
+            <div className="grid gap-6 md:grid-cols-2">
+              <ResolutionMetrics data={reportData.resolutionTimes} />
+              <Card>
+                <CardHeader>
+                  <CardTitle>System Health</CardTitle>
+                  <CardDescription>Overall system performance indicators</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span>Average Resolution Time</span>
+                      <span className="font-semibold">
+                        {reportData.resolutionTimes.length > 0 
+                          ? (reportData.resolutionTimes.reduce((sum, rt) => sum + rt.avgHours, 0) / reportData.resolutionTimes.length).toFixed(1)
+                          : '0'
+                        }h
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Active Agents</span>
+                      <span className="font-semibold">{reportData.agentPerformance.length}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Total Resolved</span>
+                      <span className="font-semibold">
+                        {reportData.agentPerformance.reduce((sum, agent) => sum + agent.resolved, 0)}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         </TabsContent>
 
-        <TabsContent value="performance" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Agent Performance</CardTitle>
-              <CardDescription>Individual agent statistics and metrics</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {reportData.agentPerformance.map((agent, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <h4 className="font-medium">{agent.agent}</h4>
-                      <div className="flex items-center gap-4 mt-2">
-                        <Badge variant="default">{agent.resolved} resolved</Badge>
-                        <Badge variant="outline">{agent.avgTime}h avg time</Badge>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm text-gray-600">Performance Score</div>
-                      <div className="text-lg font-semibold">
-                        {Math.min(100, Math.round((agent.resolved / Math.max(1, agent.avgTime)) * 10))}%
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="performance">
+          <AgentPerformance data={reportData.agentPerformance} />
         </TabsContent>
 
-        <TabsContent value="departments" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Department Statistics</CardTitle>
-              <CardDescription>Ticket distribution and resolution by department</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {reportData.departmentStats.map((dept, index) => (
-                  <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
-                    <div className="flex-1">
-                      <h4 className="font-medium">{dept.department}</h4>
-                      <div className="flex items-center gap-4 mt-2">
-                        <Badge variant="secondary">{dept.total} total</Badge>
-                        <Badge variant="default">{dept.resolved} resolved</Badge>
-                        <Badge variant="destructive">{dept.pending} pending</Badge>
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm text-gray-600">Resolution Rate</div>
-                      <div className="text-lg font-semibold">
-                        {dept.total > 0 ? Math.round((dept.resolved / dept.total) * 100) : 0}%
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+        <TabsContent value="departments">
+          <DepartmentAnalytics data={reportData.departmentStats} />
+        </TabsContent>
+
+        <TabsContent value="trends" className="space-y-6">
+          <div className="grid gap-6">
+            <TicketTrends data={reportData.ticketsByDay} />
+            <ResolutionMetrics data={reportData.resolutionTimes} />
+          </div>
         </TabsContent>
       </Tabs>
     </div>
