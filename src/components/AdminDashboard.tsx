@@ -1,12 +1,14 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, Settings, BarChart, Clock, CheckCircle, Ticket } from 'lucide-react';
+import { Users, Settings } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { AnalyticsDashboard } from '@/components/admin/AnalyticsDashboard';
+import { StatsOverview } from '@/components/admin/StatsOverview';
+import { QuickActions } from '@/components/admin/QuickActions';
+import { SystemStatus } from '@/components/admin/SystemStatus';
 
 interface Stats {
   totalTickets: number;
@@ -105,140 +107,11 @@ export const AdminDashboard = () => {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 mb-8">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Tickets</CardTitle>
-                <Ticket className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.totalTickets}</div>
-                <p className="text-xs text-muted-foreground">All time tickets</p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Open Tickets</CardTitle>
-                <Clock className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-orange-600">{stats.openTickets}</div>
-                <p className="text-xs text-muted-foreground">Awaiting assignment</p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">In Progress</CardTitle>
-                <Clock className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-blue-600">{stats.inProgressTickets}</div>
-                <p className="text-xs text-muted-foreground">Being worked on</p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Resolved</CardTitle>
-                <CheckCircle className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">{stats.resolvedTickets}</div>
-                <p className="text-xs text-muted-foreground">Completed tickets</p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Support Agents</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.totalAgents}</div>
-                <p className="text-xs text-muted-foreground">Active agents</p>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Employees</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats.totalEmployees}</div>
-                <p className="text-xs text-muted-foreground">Registered users</p>
-              </CardContent>
-            </Card>
-          </div>
+          <StatsOverview stats={stats} />
 
           <div className="grid gap-6 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Quick Actions</CardTitle>
-                <CardDescription>Common administrative tasks</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                <Link to="/admin/add-agent" className="block">
-                  <Button variant="outline" className="w-full justify-start">
-                    <Users className="h-4 w-4 mr-2" />
-                    Add Support Agent
-                  </Button>
-                </Link>
-                <Link to="/admin/department-management" className="block">
-                  <Button variant="outline" className="w-full justify-start">
-                    <Settings className="h-4 w-4 mr-2" />
-                    Manage Departments
-                  </Button>
-                </Link>
-                <Link to="/admin/queue-management" className="block">
-                  <Button variant="outline" className="w-full justify-start">
-                    <Settings className="h-4 w-4 mr-2" />
-                    Manage Agent Queues
-                  </Button>
-                </Link>
-                <Link to="/admin/ticket-management" className="block">
-                  <Button variant="outline" className="w-full justify-start">
-                    <BarChart className="h-4 w-4 mr-2" />
-                    Ticket Management
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>System Status</CardTitle>
-                <CardDescription>Current system metrics</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Resolution Rate</span>
-                    <span className="text-sm font-medium">
-                      {stats.totalTickets > 0 
-                        ? Math.round((stats.resolvedTickets / stats.totalTickets) * 100)
-                        : 0}%
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Active Tickets</span>
-                    <span className="text-sm font-medium">
-                      {stats.openTickets + stats.inProgressTickets}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-600">Agent Utilization</span>
-                    <span className="text-sm font-medium">
-                      {stats.totalAgents > 0 
-                        ? Math.round(((stats.openTickets + stats.inProgressTickets) / stats.totalAgents) * 100) / 100
-                        : 0} tickets/agent
-                    </span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <QuickActions />
+            <SystemStatus stats={stats} />
           </div>
         </TabsContent>
 

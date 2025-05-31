@@ -1,3 +1,4 @@
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -15,6 +16,8 @@ import TicketDetails from "./pages/TicketDetails";
 import AddAgent from "./pages/AddAgent";
 import QueueManagement from "./pages/QueueManagement";
 import TicketManagement from "./pages/TicketManagement";
+import UserManagement from "./pages/UserManagement";
+import Reports from "./pages/Reports";
 import Unauthorized from "./pages/Unauthorized";
 import NotFound from "./pages/NotFound";
 import DepartmentManagement from "./pages/DepartmentManagement";
@@ -83,6 +86,20 @@ const App = () => (
               <ProtectedRoute allowedRoles={['admin']}>
                 <Navbar />
                 <TicketManagement />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/admin/user-management" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <Navbar />
+                <UserManagement />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/admin/reports" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <Navbar />
+                <Reports />
               </ProtectedRoute>
             } />
             
