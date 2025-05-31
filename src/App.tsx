@@ -12,6 +12,9 @@ import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Dashboard from "./pages/Dashboard";
 import CreateTicket from "./pages/CreateTicket";
+import TicketDetails from "./pages/TicketDetails";
+import AddAgent from "./pages/AddAgent";
+import QueueManagement from "./pages/QueueManagement";
 import Unauthorized from "./pages/Unauthorized";
 import NotFound from "./pages/NotFound";
 
@@ -42,6 +45,27 @@ const App = () => (
               <ProtectedRoute allowedRoles={['employee']}>
                 <Navbar />
                 <CreateTicket />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/tickets/:id" element={
+              <ProtectedRoute>
+                <Navbar />
+                <TicketDetails />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/admin/add-agent" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <Navbar />
+                <AddAgent />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/admin/queue-management" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <Navbar />
+                <QueueManagement />
               </ProtectedRoute>
             } />
             
