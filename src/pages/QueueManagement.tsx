@@ -24,30 +24,63 @@ interface Department {
 }
 
 export default function QueueManagement() {
-  const { profile } = useAuth();
+  const { profile, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (profile?.role === 'admin') {
-      fetchDepartments();
+    console.log('QueueManagement effect running, profile:', profile, 'authLoading:', authLoading);
+    
+    if (authLoading) {
+      console.log('Auth still loading, waiting...');
+      return;
     }
-  }, [profile]);
+
+    if (!profile) {
+      console.log('No profile found, setting loading to false');
+      setLoading(false);
+      return;
+    }
+
+    if (profile.role !== 'admin') {
+      console.log('User is not admin, setting loading to false');
+      setLoading(false);
+      return;
+    }
+
+    console.log('User is admin, fetching departments');
+    fetchDepartments();
+  }, [profile, authLoading]);
 
   const fetchDepartments = async () => {
     try {
+      console.log('Fetching departments...');
       // Fetch departments with their agents
       const { data: departmentsData, error: deptError } = await supabase
         .from('departments')
         .select('id, name')
         .order('name');
 
-      if (deptError) throw deptError;
+      if (deptError) {
+        console.error('Error fetching departments:', deptError);
+        throw deptError;
+      }
+
+      console.log('Departments fetched:', departmentsData);
+
+      if (!departmentsData || departmentsData.length === 0) {
+        console.log('No departments found');
+        setDepartments([]);
+        setLoading(false);
+        return;
+      }
 
       // Fetch agents for each department
       const departmentsWithAgents = await Promise.all(
         departmentsData.map(async (dept) => {
+          console.log('Fetching agents for department:', dept.name);
+          
           const { data: agentsData } = await supabase
             .from('profiles')
             .select('id, full_name, email')
@@ -61,6 +94,8 @@ export default function QueueManagement() {
             .eq('department_id', dept.id)
             .single();
 
+          console.log('Queue data for', dept.name, ':', queueData);
+
           return {
             ...dept,
             agents: agentsData || [],
@@ -70,9 +105,15 @@ export default function QueueManagement() {
         })
       );
 
+      console.log('Final departments with agents:', departmentsWithAgents);
       setDepartments(departmentsWithAgents);
     } catch (error) {
       console.error('Error fetching departments:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load departments",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -134,7 +175,17 @@ export default function QueueManagement() {
     return department.agents.find(agent => agent.id === agentId) || null;
   };
 
-  if (profile?.role !== 'admin') {
+  // Show loading while auth is loading
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Check for admin role after auth is loaded
+  if (!profile || profile.role !== 'admin') {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
@@ -148,6 +199,7 @@ export default function QueueManagement() {
     );
   }
 
+  // Show loading while fetching departments
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -163,112 +215,120 @@ export default function QueueManagement() {
         <p className="text-gray-600">Manage agent assignment queues for each department</p>
       </div>
 
-      <div className="grid gap-6">
-        {departments.map((department) => (
-          <Card key={department.id}>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    <Settings className="h-5 w-5" />
-                    {department.name}
-                  </CardTitle>
-                  <CardDescription>
-                    {department.agents.length} agents • Queue position: {department.current_index + 1}
-                  </CardDescription>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => initializeQueue(department.id)}
-                    disabled={department.queue_order.length > 0}
-                  >
-                    Initialize Queue
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => resetQueue(department.id)}
-                  >
-                    <RotateCcw className="h-4 w-4 mr-2" />
-                    Reset
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {department.agents.length === 0 ? (
-                <div className="text-center py-8">
-                  <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No agents in this department</h3>
-                  <p className="text-gray-600">Add agents to this department to set up the queue</p>
-                </div>
-              ) : department.queue_order.length === 0 ? (
-                <div className="text-center py-8">
-                  <Settings className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">Queue not initialized</h3>
-                  <p className="text-gray-600 mb-4">Initialize the queue to start assigning tickets</p>
-                  <Button onClick={() => initializeQueue(department.id)}>
-                    Initialize Queue
-                  </Button>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  <div className="mb-4">
-                    <h4 className="font-medium mb-2">Current Queue Order:</h4>
-                    <div className="space-y-2">
-                      {department.queue_order.map((agentId, index) => {
-                        const agent = getAgentByIndex(department, index);
-                        const isNext = index === department.current_index;
-                        
-                        return (
-                          <div
-                            key={agentId}
-                            className={`flex items-center justify-between p-3 border rounded-lg ${
-                              isNext ? 'border-blue-500 bg-blue-50' : ''
-                            }`}
-                          >
-                            <div className="flex items-center gap-3">
-                              <span className="text-sm font-medium w-8">#{index + 1}</span>
-                              <div>
-                                <p className="font-medium">{agent?.full_name || 'Unknown Agent'}</p>
-                                <p className="text-sm text-gray-500">{agent?.email}</p>
-                              </div>
-                              {isNext && (
-                                <Badge variant="default">Next</Badge>
-                              )}
-                            </div>
-                            
-                            <div className="flex gap-1">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => moveAgent(department.id, index, Math.max(0, index - 1))}
-                                disabled={index === 0}
-                              >
-                                <ArrowUp className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => moveAgent(department.id, index, Math.min(department.queue_order.length - 1, index + 1))}
-                                disabled={index === department.queue_order.length - 1}
-                              >
-                                <ArrowDown className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+      {departments.length === 0 ? (
+        <div className="text-center py-12">
+          <Settings className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+          <h3 className="text-xl font-medium text-gray-900 mb-2">No departments found</h3>
+          <p className="text-gray-600">Create departments first to manage agent queues</p>
+        </div>
+      ) : (
+        <div className="grid gap-6">
+          {departments.map((department) => (
+            <Card key={department.id}>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Settings className="h-5 w-5" />
+                      {department.name}
+                    </CardTitle>
+                    <CardDescription>
+                      {department.agents.length} agents • Queue position: {department.current_index + 1}
+                    </CardDescription>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => initializeQueue(department.id)}
+                      disabled={department.queue_order.length > 0}
+                    >
+                      Initialize Queue
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => resetQueue(department.id)}
+                    >
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                      Reset
+                    </Button>
                   </div>
                 </div>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardHeader>
+              <CardContent>
+                {department.agents.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No agents in this department</h3>
+                    <p className="text-gray-600">Add agents to this department to set up the queue</p>
+                  </div>
+                ) : department.queue_order.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Settings className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">Queue not initialized</h3>
+                    <p className="text-gray-600 mb-4">Initialize the queue to start assigning tickets</p>
+                    <Button onClick={() => initializeQueue(department.id)}>
+                      Initialize Queue
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="mb-4">
+                      <h4 className="font-medium mb-2">Current Queue Order:</h4>
+                      <div className="space-y-2">
+                        {department.queue_order.map((agentId, index) => {
+                          const agent = getAgentByIndex(department, index);
+                          const isNext = index === department.current_index;
+                          
+                          return (
+                            <div
+                              key={agentId}
+                              className={`flex items-center justify-between p-3 border rounded-lg ${
+                                isNext ? 'border-blue-500 bg-blue-50' : ''
+                              }`}
+                            >
+                              <div className="flex items-center gap-3">
+                                <span className="text-sm font-medium w-8">#{index + 1}</span>
+                                <div>
+                                  <p className="font-medium">{agent?.full_name || 'Unknown Agent'}</p>
+                                  <p className="text-sm text-gray-500">{agent?.email}</p>
+                                </div>
+                                {isNext && (
+                                  <Badge variant="default">Next</Badge>
+                                )}
+                              </div>
+                              
+                              <div className="flex gap-1">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => moveAgent(department.id, index, Math.max(0, index - 1))}
+                                  disabled={index === 0}
+                                >
+                                  <ArrowUp className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => moveAgent(department.id, index, Math.min(department.queue_order.length - 1, index + 1))}
+                                  disabled={index === department.queue_order.length - 1}
+                                >
+                                  <ArrowDown className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
