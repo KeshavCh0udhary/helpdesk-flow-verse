@@ -3,7 +3,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Clock, CheckCircle, AlertCircle, User } from 'lucide-react';
+import { Clock, CheckCircle, AlertCircle, User, RefreshCw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import { Link } from 'react-router-dom';
 
 interface Ticket {
@@ -20,21 +21,34 @@ export const SupportAgentDashboard = () => {
   const { user } = useAuth();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     if (user) {
       fetchAssignedTickets();
       
-      // Set up real-time subscription
+      // Set up real-time subscription for ticket updates
       const channel = supabase
-        .channel('assigned-tickets')
+        .channel('agent-ticket-updates')
         .on('postgres_changes', {
           event: '*',
           schema: 'public',
           table: 'tickets',
           filter: `assigned_to_agent_id=eq.${user.id}`
         }, () => {
+          console.log('Ticket update detected, refreshing...');
           fetchAssignedTickets();
+        })
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'tickets'
+        }, (payload) => {
+          // If a ticket was assigned to this agent, refresh
+          if (payload.new.assigned_to_agent_id === user.id) {
+            console.log('New ticket assigned, refreshing...');
+            fetchAssignedTickets();
+          }
         })
         .subscribe();
 
@@ -45,8 +59,11 @@ export const SupportAgentDashboard = () => {
   }, [user]);
 
   const fetchAssignedTickets = async () => {
+    if (!user?.id) return;
+    
     try {
-      // First get the tickets
+      console.log('Fetching tickets for agent:', user.id);
+      
       const { data: ticketsData, error: ticketsError } = await supabase
         .from('tickets')
         .select(`
@@ -58,7 +75,7 @@ export const SupportAgentDashboard = () => {
           created_by_user_id,
           department:departments(name)
         `)
-        .eq('assigned_to_agent_id', user?.id)
+        .eq('assigned_to_agent_id', user.id)
         .order('created_at', { ascending: false });
 
       if (ticketsError) {
@@ -67,43 +84,54 @@ export const SupportAgentDashboard = () => {
         return;
       }
 
+      console.log('Fetched tickets data:', ticketsData);
+
       if (!ticketsData) {
         setTickets([]);
         setLoading(false);
         return;
       }
 
-      // Then get user profiles for all unique user IDs
+      // Get user profiles for all unique user IDs
       const userIds = [...new Set(ticketsData.map(ticket => ticket.created_by_user_id))];
       
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .in('id', userIds);
+      if (userIds.length > 0) {
+        const { data: profilesData, error: profilesError } = await supabase
+          .from('profiles')
+          .select('id, full_name')
+          .in('id', userIds);
 
-      if (profilesError) {
-        console.error('Error fetching profiles:', profilesError);
-        setLoading(false);
-        return;
+        if (profilesError) {
+          console.error('Error fetching profiles:', profilesError);
+        }
+
+        // Create a map of user ID to profile
+        const profilesMap = (profilesData || []).reduce((acc, profile) => {
+          acc[profile.id] = profile;
+          return acc;
+        }, {} as Record<string, { full_name: string }>);
+
+        // Combine tickets with user information
+        const ticketsWithUsers = ticketsData.map(ticket => ({
+          ...ticket,
+          created_by_user: profilesMap[ticket.created_by_user_id] || { full_name: 'Unknown User' }
+        }));
+
+        console.log('Final tickets with users:', ticketsWithUsers);
+        setTickets(ticketsWithUsers);
+      } else {
+        setTickets([]);
       }
-
-      // Create a map of user ID to profile
-      const profilesMap = (profilesData || []).reduce((acc, profile) => {
-        acc[profile.id] = profile;
-        return acc;
-      }, {} as Record<string, { full_name: string }>);
-
-      // Combine tickets with user information
-      const ticketsWithUsers = ticketsData.map(ticket => ({
-        ...ticket,
-        created_by_user: profilesMap[ticket.created_by_user_id] || { full_name: 'Unknown User' }
-      }));
-
-      setTickets(ticketsWithUsers);
     } catch (error) {
       console.error('Unexpected error:', error);
     }
     setLoading(false);
+    setRefreshing(false);
+  };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    fetchAssignedTickets();
   };
 
   const getStatusIcon = (status: string) => {
@@ -145,9 +173,20 @@ export const SupportAgentDashboard = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Assigned Tickets</h1>
-        <p className="text-gray-600">Manage and resolve customer support requests</p>
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Assigned Tickets</h1>
+          <p className="text-gray-600">Manage and resolve customer support requests</p>
+        </div>
+        <Button 
+          variant="outline" 
+          onClick={handleRefresh}
+          disabled={refreshing}
+          className="flex items-center gap-2"
+        >
+          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-8">
@@ -209,6 +248,14 @@ export const SupportAgentDashboard = () => {
               <CheckCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-gray-900 mb-2">No tickets assigned</h3>
               <p className="text-gray-600">New tickets will appear here when assigned to you</p>
+              <Button 
+                variant="outline" 
+                onClick={handleRefresh}
+                className="mt-4"
+                disabled={refreshing}
+              >
+                {refreshing ? 'Checking...' : 'Check for new tickets'}
+              </Button>
             </div>
           ) : (
             <div className="space-y-4">

@@ -15,6 +15,7 @@ import CreateTicket from "./pages/CreateTicket";
 import TicketDetails from "./pages/TicketDetails";
 import AddAgent from "./pages/AddAgent";
 import QueueManagement from "./pages/QueueManagement";
+import TicketManagement from "./pages/TicketManagement";
 import Unauthorized from "./pages/Unauthorized";
 import NotFound from "./pages/NotFound";
 
@@ -68,6 +69,13 @@ const App = () => (
               <ProtectedRoute allowedRoles={['admin']}>
                 <Navbar />
                 <QueueManagement />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/admin/ticket-management" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <Navbar />
+                <TicketManagement />
               </ProtectedRoute>
             } />
             

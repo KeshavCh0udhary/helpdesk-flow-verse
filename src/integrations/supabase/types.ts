@@ -235,7 +235,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      get_next_agent_in_queue: {
+        Args: { dept_id: string }
+        Returns: string
+      }
     }
     Enums: {
       ticket_priority: "low" | "medium" | "high" | "urgent"
