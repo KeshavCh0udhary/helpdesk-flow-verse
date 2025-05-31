@@ -84,10 +84,16 @@ export const GlobalSearch = () => {
           .or(`title.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
 
         if (filters.status !== 'all') {
-          ticketQuery = ticketQuery.eq('status', filters.status);
+          const validStatuses = ['open', 'in_progress', 'resolved', 'closed'];
+          if (validStatuses.includes(filters.status)) {
+            ticketQuery = ticketQuery.eq('status', filters.status);
+          }
         }
         if (filters.priority !== 'all') {
-          ticketQuery = ticketQuery.eq('priority', filters.priority);
+          const validPriorities = ['urgent', 'high', 'medium', 'low'];
+          if (validPriorities.includes(filters.priority)) {
+            ticketQuery = ticketQuery.eq('priority', filters.priority);
+          }
         }
         if (filters.department !== 'all') {
           ticketQuery = ticketQuery.eq('department_id', filters.department);
@@ -166,6 +172,7 @@ export const GlobalSearch = () => {
       }
 
       // Apply date range filter
+      let filteredResults = searchResults;
       if (filters.dateRange !== 'all') {
         const now = new Date();
         let cutoffDate = new Date();
@@ -182,17 +189,17 @@ export const GlobalSearch = () => {
             break;
         }
 
-        searchResults.filter(result => 
+        filteredResults = searchResults.filter(result => 
           new Date(result.created_at) >= cutoffDate
         );
       }
 
       // Sort by relevance and date
-      searchResults.sort((a, b) => 
+      filteredResults.sort((a, b) => 
         new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       );
 
-      setResults(searchResults);
+      setResults(filteredResults);
     } catch (error) {
       console.error('Search error:', error);
     } finally {
