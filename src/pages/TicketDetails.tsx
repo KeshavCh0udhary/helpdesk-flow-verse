@@ -11,13 +11,17 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ArrowLeft, MessageCircle, Paperclip, Send } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { Database } from '@/integrations/supabase/types';
+
+type TicketStatus = Database['public']['Enums']['ticket_status'];
+type TicketPriority = Database['public']['Enums']['ticket_priority'];
 
 interface Ticket {
   id: string;
   title: string;
   description: string;
-  status: string;
-  priority: string;
+  status: TicketStatus;
+  priority: TicketPriority;
   created_at: string;
   created_by_user: { full_name: string };
   assigned_to_agent: { full_name: string } | null;
@@ -191,7 +195,7 @@ export default function TicketDetails() {
     }
   };
 
-  const handleStatusChange = async (newStatus: string) => {
+  const handleStatusChange = async (newStatus: TicketStatus) => {
     try {
       const { error } = await supabase
         .from('tickets')
@@ -225,7 +229,7 @@ export default function TicketDetails() {
     return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: TicketStatus) => {
     switch (status) {
       case 'resolved': return 'bg-green-100 text-green-800';
       case 'in_progress': return 'bg-blue-100 text-blue-800';
@@ -234,7 +238,7 @@ export default function TicketDetails() {
     }
   };
 
-  const getPriorityColor = (priority: string) => {
+  const getPriorityColor = (priority: TicketPriority) => {
     switch (priority) {
       case 'urgent': return 'bg-red-100 text-red-800';
       case 'high': return 'bg-orange-100 text-orange-800';
