@@ -45,22 +45,63 @@ export const SupportAgentDashboard = () => {
   }, [user]);
 
   const fetchAssignedTickets = async () => {
-    const { data, error } = await supabase
-      .from('tickets')
-      .select(`
-        id,
-        title,
-        status,
-        priority,
-        created_at,
-        created_by_user:profiles!tickets_created_by_user_id_fkey(full_name),
-        department:departments(name)
-      `)
-      .eq('assigned_to_agent_id', user?.id)
-      .order('created_at', { ascending: false });
+    try {
+      // First get the tickets
+      const { data: ticketsData, error: ticketsError } = await supabase
+        .from('tickets')
+        .select(`
+          id,
+          title,
+          status,
+          priority,
+          created_at,
+          created_by_user_id,
+          department:departments(name)
+        `)
+        .eq('assigned_to_agent_id', user?.id)
+        .order('created_at', { ascending: false });
 
-    if (!error && data) {
-      setTickets(data);
+      if (ticketsError) {
+        console.error('Error fetching tickets:', ticketsError);
+        setLoading(false);
+        return;
+      }
+
+      if (!ticketsData) {
+        setTickets([]);
+        setLoading(false);
+        return;
+      }
+
+      // Then get user profiles for all unique user IDs
+      const userIds = [...new Set(ticketsData.map(ticket => ticket.created_by_user_id))];
+      
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', userIds);
+
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError);
+        setLoading(false);
+        return;
+      }
+
+      // Create a map of user ID to profile
+      const profilesMap = (profilesData || []).reduce((acc, profile) => {
+        acc[profile.id] = profile;
+        return acc;
+      }, {} as Record<string, { full_name: string }>);
+
+      // Combine tickets with user information
+      const ticketsWithUsers = ticketsData.map(ticket => ({
+        ...ticket,
+        created_by_user: profilesMap[ticket.created_by_user_id] || { full_name: 'Unknown User' }
+      }));
+
+      setTickets(ticketsWithUsers);
+    } catch (error) {
+      console.error('Unexpected error:', error);
     }
     setLoading(false);
   };
