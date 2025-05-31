@@ -27,6 +27,10 @@ interface SearchFilters {
   dateRange: string;
 }
 
+// Define the valid types for Supabase queries
+type TicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+type TicketPriority = 'urgent' | 'high' | 'medium' | 'low';
+
 export const GlobalSearch = () => {
   const { user } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
@@ -84,15 +88,15 @@ export const GlobalSearch = () => {
           .or(`title.ilike.%${searchTerm}%,description.ilike.%${searchTerm}%`);
 
         if (filters.status !== 'all') {
-          const validStatuses = ['open', 'in_progress', 'resolved', 'closed'];
-          if (validStatuses.includes(filters.status)) {
-            ticketQuery = ticketQuery.eq('status', filters.status);
+          const validStatuses: TicketStatus[] = ['open', 'in_progress', 'resolved', 'closed'];
+          if (validStatuses.includes(filters.status as TicketStatus)) {
+            ticketQuery = ticketQuery.eq('status', filters.status as TicketStatus);
           }
         }
         if (filters.priority !== 'all') {
-          const validPriorities = ['urgent', 'high', 'medium', 'low'];
-          if (validPriorities.includes(filters.priority)) {
-            ticketQuery = ticketQuery.eq('priority', filters.priority);
+          const validPriorities: TicketPriority[] = ['urgent', 'high', 'medium', 'low'];
+          if (validPriorities.includes(filters.priority as TicketPriority)) {
+            ticketQuery = ticketQuery.eq('priority', filters.priority as TicketPriority);
           }
         }
         if (filters.department !== 'all') {
