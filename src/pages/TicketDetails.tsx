@@ -6,12 +6,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ArrowLeft, MessageCircle, Paperclip, Send } from 'lucide-react';
+import { ArrowLeft, Paperclip } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Database } from '@/integrations/supabase/types';
+import { EnhancedComments } from '@/components/EnhancedComments';
 
 type TicketStatus = Database['public']['Enums']['ticket_status'];
 type TicketPriority = Database['public']['Enums']['ticket_priority'];
@@ -28,18 +27,12 @@ interface Ticket {
   department: { name: string };
 }
 
-interface Comment {
-  id: string;
-  content: string;
-  created_at: string;
-  user: { full_name: string };
-}
-
 interface Attachment {
   id: string;
   file_name: string;
   size_bytes: number;
   created_at: string;
+  storage_path: string;
 }
 
 export default function TicketDetails() {
@@ -47,16 +40,12 @@ export default function TicketDetails() {
   const { user, profile } = useAuth();
   const { toast } = useToast();
   const [ticket, setTicket] = useState<Ticket | null>(null);
-  const [comments, setComments] = useState<Comment[]>([]);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
-  const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (id) {
       fetchTicketDetails();
-      fetchComments();
       fetchAttachments();
     }
   }, [id]);
@@ -110,88 +99,18 @@ export default function TicketDetails() {
     }
   };
 
-  const fetchComments = async () => {
-    try {
-      const { data: commentsData, error } = await supabase
-        .from('comments')
-        .select(`
-          id,
-          content,
-          created_at,
-          user_id
-        `)
-        .eq('ticket_id', id)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-
-      // Fetch user profiles for comments
-      const userIds = [...new Set(commentsData.map(comment => comment.user_id))];
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, full_name')
-        .in('id', userIds);
-
-      const profilesMap = profiles?.reduce((acc, profile) => {
-        acc[profile.id] = profile;
-        return acc;
-      }, {} as Record<string, { full_name: string }>) || {};
-
-      const commentsWithUsers = commentsData.map(comment => ({
-        ...comment,
-        user: profilesMap[comment.user_id] || { full_name: 'Unknown User' }
-      }));
-
-      setComments(commentsWithUsers);
-    } catch (error) {
-      console.error('Error fetching comments:', error);
-    }
-  };
-
   const fetchAttachments = async () => {
     try {
       const { data, error } = await supabase
         .from('attachments')
-        .select('id, file_name, size_bytes, created_at')
-        .eq('ticket_id', id);
+        .select('id, file_name, size_bytes, created_at, storage_path')
+        .eq('ticket_id', id)
+        .is('comment_id', null); // Only get ticket attachments, not comment attachments
 
       if (error) throw error;
       setAttachments(data || []);
     } catch (error) {
       console.error('Error fetching attachments:', error);
-    }
-  };
-
-  const handleAddComment = async () => {
-    if (!newComment.trim() || !user) return;
-
-    setSubmitting(true);
-    try {
-      const { error } = await supabase
-        .from('comments')
-        .insert({
-          ticket_id: id!,
-          user_id: user.id,
-          content: newComment.trim(),
-        });
-
-      if (error) throw error;
-
-      setNewComment('');
-      fetchComments();
-      toast({
-        title: "Success",
-        description: "Comment added successfully",
-      });
-    } catch (error) {
-      console.error('Error adding comment:', error);
-      toast({
-        title: "Error",
-        description: "Failed to add comment",
-        variant: "destructive",
-      });
-    } finally {
-      setSubmitting(false);
     }
   };
 
@@ -217,6 +136,32 @@ export default function TicketDetails() {
       toast({
         title: "Error",
         description: "Failed to update ticket status",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const downloadFile = async (storagePath: string, fileName: string) => {
+    try {
+      const { data, error } = await supabase.storage
+        .from('attachments')
+        .download(storagePath);
+
+      if (error) throw error;
+
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading file:', error);
+      toast({
+        title: "Error",
+        description: "Failed to download file",
         variant: "destructive",
       });
     }
@@ -342,7 +287,13 @@ export default function TicketDetails() {
                         <p className="font-medium">{attachment.file_name}</p>
                         <p className="text-sm text-gray-500">{formatFileSize(attachment.size_bytes)}</p>
                       </div>
-                      <Button variant="outline" size="sm">Download</Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => downloadFile(attachment.storage_path, attachment.file_name)}
+                      >
+                        Download
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -350,46 +301,7 @@ export default function TicketDetails() {
             </Card>
           )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MessageCircle className="h-4 w-4" />
-                Comments ({comments.length})
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4 mb-4">
-                {comments.map((comment) => (
-                  <div key={comment.id} className="border-l-4 border-blue-200 pl-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="font-medium">{comment.user.full_name}</p>
-                      <p className="text-sm text-gray-500">
-                        {new Date(comment.created_at).toLocaleString()}
-                      </p>
-                    </div>
-                    <p className="whitespace-pre-wrap">{comment.content}</p>
-                  </div>
-                ))}
-              </div>
-
-              <div className="space-y-3">
-                <Textarea
-                  placeholder="Add a comment..."
-                  value={newComment}
-                  onChange={(e) => setNewComment(e.target.value)}
-                  rows={3}
-                />
-                <Button 
-                  onClick={handleAddComment} 
-                  disabled={!newComment.trim() || submitting}
-                  className="w-full"
-                >
-                  <Send className="h-4 w-4 mr-2" />
-                  {submitting ? 'Adding...' : 'Add Comment'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+          <EnhancedComments ticketId={ticket.id} />
         </div>
 
         <div className="space-y-6">

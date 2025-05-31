@@ -1,40 +1,66 @@
 
-import { useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Paperclip, Upload, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { Paperclip, X, Upload } from 'lucide-react';
 
 interface FileUploadProps {
+  onFileUploaded: (file: { id: string; file_name: string; size_bytes: number; storage_path: string }) => void;
   ticketId?: string;
   commentId?: string;
-  onUploadComplete?: (attachment: any) => void;
+  maxFileSize?: number; // in MB
+  allowedTypes?: string[];
 }
 
-export const FileUpload = ({ ticketId, commentId, onUploadComplete }: FileUploadProps) => {
-  const [files, setFiles] = useState<FileList | null>(null);
-  const [uploading, setUploading] = useState(false);
+export const FileUpload = ({ 
+  onFileUploaded, 
+  ticketId, 
+  commentId, 
+  maxFileSize = 10,
+  allowedTypes = ['image/*', 'application/pdf', '.doc', '.docx', '.txt']
+}: FileUploadProps) => {
+  const { user } = useAuth();
   const { toast } = useToast();
+  const [uploading, setUploading] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFiles(e.target.files);
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    const validFiles = files.filter(file => {
+      if (file.size > maxFileSize * 1024 * 1024) {
+        toast({
+          title: "File too large",
+          description: `${file.name} is larger than ${maxFileSize}MB`,
+          variant: "destructive",
+        });
+        return false;
+      }
+      return true;
+    });
+
+    setSelectedFiles(prev => [...prev, ...validFiles]);
   };
 
-  const handleUpload = async () => {
-    if (!files || files.length === 0) return;
+  const removeFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadFiles = async () => {
+    if (!user || selectedFiles.length === 0) return;
 
     setUploading(true);
     try {
-      const uploadPromises = Array.from(files).map(async (file) => {
+      for (const file of selectedFiles) {
         const fileExt = file.name.split('.').pop();
-        const fileName = `${Date.now()}-${Math.random()}.${fileExt}`;
-        const filePath = `attachments/${fileName}`;
-
-        // Upload file to Supabase Storage
+        const fileName = `${user.id}/${Date.now()}_${file.name}`;
+        
+        // Upload to Supabase Storage
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('attachments')
-          .upload(filePath, file);
+          .upload(fileName, file);
 
         if (uploadError) throw uploadError;
 
@@ -46,38 +72,36 @@ export const FileUpload = ({ ticketId, commentId, onUploadComplete }: FileUpload
             storage_path: uploadData.path,
             size_bytes: file.size,
             mime_type: file.type,
+            uploaded_by_user_id: user.id,
             ticket_id: ticketId,
-            comment_id: commentId,
-            uploaded_by_user_id: (await supabase.auth.getUser()).data.user?.id,
+            comment_id: commentId
           })
           .select()
           .single();
 
         if (attachmentError) throw attachmentError;
 
-        return attachmentData;
-      });
-
-      const attachments = await Promise.all(uploadPromises);
-      
-      toast({
-        title: "Success",
-        description: `${attachments.length} file(s) uploaded successfully`,
-      });
-
-      setFiles(null);
-      if (onUploadComplete) {
-        attachments.forEach(onUploadComplete);
+        onFileUploaded({
+          id: attachmentData.id,
+          file_name: attachmentData.file_name,
+          size_bytes: attachmentData.size_bytes,
+          storage_path: attachmentData.storage_path
+        });
       }
 
-      // Reset the file input
-      const fileInput = document.getElementById('file-upload') as HTMLInputElement;
-      if (fileInput) fileInput.value = '';
+      setSelectedFiles([]);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
 
-    } catch (error: any) {
-      console.error('Upload error:', error);
       toast({
-        title: "Error",
+        title: "Success",
+        description: `${selectedFiles.length} file(s) uploaded successfully`,
+      });
+    } catch (error: any) {
+      console.error('Error uploading files:', error);
+      toast({
+        title: "Upload failed",
         description: error.message || "Failed to upload files",
         variant: "destructive",
       });
@@ -86,61 +110,56 @@ export const FileUpload = ({ ticketId, commentId, onUploadComplete }: FileUpload
     }
   };
 
-  const removeFile = (index: number) => {
-    if (!files) return;
-    
-    const dt = new DataTransfer();
-    for (let i = 0; i < files.length; i++) {
-      if (i !== index) {
-        dt.items.add(files[i]);
-      }
-    }
-    setFiles(dt.files);
+  const formatFileSize = (bytes: number) => {
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    if (bytes === 0) return '0 Bytes';
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
   };
 
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <Input
-          id="file-upload"
+        <input
+          ref={fileInputRef}
           type="file"
           multiple
+          accept={allowedTypes.join(',')}
           onChange={handleFileSelect}
           className="hidden"
         />
         <Button
           type="button"
           variant="outline"
-          onClick={() => document.getElementById('file-upload')?.click()}
-          className="flex items-center gap-2"
+          size="sm"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
         >
-          <Paperclip className="h-4 w-4" />
-          Select Files
+          <Paperclip className="h-4 w-4 mr-2" />
+          Attach Files
         </Button>
         
-        {files && files.length > 0 && (
+        {selectedFiles.length > 0 && (
           <Button
             type="button"
-            onClick={handleUpload}
+            size="sm"
+            onClick={uploadFiles}
             disabled={uploading}
-            className="flex items-center gap-2"
           >
-            <Upload className="h-4 w-4" />
-            {uploading ? 'Uploading...' : `Upload ${files.length} file(s)`}
+            <Upload className="h-4 w-4 mr-2" />
+            {uploading ? 'Uploading...' : `Upload ${selectedFiles.length} file(s)`}
           </Button>
         )}
       </div>
 
-      {files && files.length > 0 && (
+      {selectedFiles.length > 0 && (
         <div className="space-y-2">
           <p className="text-sm text-gray-600">Selected files:</p>
-          {Array.from(files).map((file, index) => (
-            <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+          {selectedFiles.map((file, index) => (
+            <div key={index} className="flex items-center justify-between p-2 border rounded">
               <div>
                 <p className="text-sm font-medium">{file.name}</p>
-                <p className="text-xs text-gray-500">
-                  {(file.size / 1024 / 1024).toFixed(2)} MB
-                </p>
+                <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
               </div>
               <Button
                 type="button"
