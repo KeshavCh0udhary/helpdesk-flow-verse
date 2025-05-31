@@ -84,19 +84,29 @@ export default function Reports() {
           assigned_to_agent_id,
           status,
           created_at,
-          resolved_at,
-          profiles!tickets_assigned_to_agent_id_fkey (
-            full_name
-          )
+          resolved_at
         `)
         .not('assigned_to_agent_id', 'is', null);
+
+      // Fetch agent profiles separately
+      const agentIds = [...new Set(agentTickets?.map(t => t.assigned_to_agent_id).filter(Boolean))];
+      const { data: agentProfiles } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', agentIds);
+
+      // Create a map of agent IDs to names
+      const agentNameMap = new Map();
+      agentProfiles?.forEach(profile => {
+        agentNameMap.set(profile.id, profile.full_name);
+      });
 
       // Process agent performance data
       const agentMap = new Map();
       
       agentTickets?.forEach(ticket => {
         const agentId = ticket.assigned_to_agent_id;
-        const agentName = ticket.profiles?.full_name || 'Unknown Agent';
+        const agentName = agentNameMap.get(agentId) || 'Unknown Agent';
         
         if (!agentMap.has(agentId)) {
           agentMap.set(agentId, {
