@@ -34,7 +34,9 @@ const App = () => (
             <Route path="/unauthorized" element={<Unauthorized />} />
             
             {/* Protected routes */}
-            <Route path="/" element={
+            <Route path="/" element={<Index />} />
+            
+            <Route path="/dashboard" element={
               <ProtectedRoute>
                 <Navbar />
                 <Dashboard />

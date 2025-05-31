@@ -12,27 +12,42 @@ import { AlertCircle } from 'lucide-react';
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [localLoading, setLocalLoading] = useState(false);
   const [error, setError] = useState('');
   
-  const { signIn, user } = useAuth();
+  const { signIn, user, loading } = useAuth();
 
+  // Show loading spinner while auth is initializing
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  // Only redirect if we're sure the user is authenticated
   if (user) {
     return <Navigate to="/" replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    setLocalLoading(true);
     setError('');
 
-    const { error } = await signIn(email, password);
-    
-    if (error) {
-      setError(error.message);
+    try {
+      const { error } = await signIn(email, password);
+      
+      if (error) {
+        setError(error.message);
+        setLocalLoading(false);
+      }
+      // Don't set loading to false here if successful, as we'll redirect
+    } catch (err) {
+      setError('An unexpected error occurred');
+      setLocalLoading(false);
     }
-    
-    setLoading(false);
   };
 
   return (
@@ -62,6 +77,7 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 required
                 placeholder="your.email@company.com"
+                disabled={localLoading}
               />
             </div>
             
@@ -74,11 +90,12 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 placeholder="Enter your password"
+                disabled={localLoading}
               />
             </div>
             
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Signing In...' : 'Sign In'}
+            <Button type="submit" className="w-full" disabled={localLoading}>
+              {localLoading ? 'Signing In...' : 'Sign In'}
             </Button>
           </form>
           
