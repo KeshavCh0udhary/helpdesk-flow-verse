@@ -77,40 +77,56 @@ export default function Reports() {
         pending: dept.tickets?.filter(t => t.status === 'open' || t.status === 'in_progress').length || 0,
       })) || [];
 
-      // Fetch agent performance
-      const { data: agents } = await supabase
-        .from('profiles')
+      // Fetch agent performance - fix the query structure
+      const { data: agentTickets } = await supabase
+        .from('tickets')
         .select(`
-          id,
-          full_name,
-          tickets!assigned_to_agent_id (
-            id,
-            status,
-            created_at,
-            resolved_at
+          assigned_to_agent_id,
+          status,
+          created_at,
+          resolved_at,
+          profiles!tickets_assigned_to_agent_id_fkey (
+            full_name
           )
         `)
-        .eq('role', 'support_agent');
+        .not('assigned_to_agent_id', 'is', null);
 
-      const agentPerformance = agents?.map(agent => {
-        const resolvedTickets = agent.tickets?.filter(t => t.status === 'resolved' || t.status === 'closed') || [];
-        const avgTime = resolvedTickets.length > 0 
-          ? resolvedTickets.reduce((acc, ticket) => {
-              if (ticket.resolved_at) {
-                const created = new Date(ticket.created_at);
-                const resolved = new Date(ticket.resolved_at);
-                return acc + (resolved.getTime() - created.getTime()) / (1000 * 60 * 60); // hours
-              }
-              return acc;
-            }, 0) / resolvedTickets.length
-          : 0;
+      // Process agent performance data
+      const agentMap = new Map();
+      
+      agentTickets?.forEach(ticket => {
+        const agentId = ticket.assigned_to_agent_id;
+        const agentName = ticket.profiles?.full_name || 'Unknown Agent';
+        
+        if (!agentMap.has(agentId)) {
+          agentMap.set(agentId, {
+            agent: agentName,
+            resolved: 0,
+            totalTime: 0,
+            resolvedCount: 0,
+          });
+        }
+        
+        const agentData = agentMap.get(agentId);
+        
+        if (ticket.status === 'resolved' || ticket.status === 'closed') {
+          agentData.resolved++;
+          
+          if (ticket.resolved_at) {
+            const created = new Date(ticket.created_at);
+            const resolved = new Date(ticket.resolved_at);
+            const timeHours = (resolved.getTime() - created.getTime()) / (1000 * 60 * 60);
+            agentData.totalTime += timeHours;
+            agentData.resolvedCount++;
+          }
+        }
+      });
 
-        return {
-          agent: agent.full_name,
-          resolved: resolvedTickets.length,
-          avgTime: Math.round(avgTime * 10) / 10,
-        };
-      }) || [];
+      const agentPerformance = Array.from(agentMap.values()).map(agent => ({
+        agent: agent.agent,
+        resolved: agent.resolved,
+        avgTime: agent.resolvedCount > 0 ? Math.round((agent.totalTime / agent.resolvedCount) * 10) / 10 : 0,
+      }));
 
       // Calculate resolution times by department
       const resolutionTimes = departmentStats.map(dept => ({

@@ -7,11 +7,13 @@ import { Badge } from '@/components/ui/badge';
 import { Users, Settings, CheckCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
+type UserRole = 'admin' | 'employee' | 'support_agent';
+
 interface User {
   id: string;
   full_name: string;
   email: string;
-  role: string;
+  role: UserRole;
   department_id?: string;
   department?: { name: string };
   created_at: string;
@@ -78,7 +80,7 @@ export default function UserManagement() {
     }
   };
 
-  const updateUserRole = async (userId: string, newRole: string) => {
+  const updateUserRole = async (userId: string, newRole: UserRole) => {
     try {
       const { error } = await supabase
         .from('profiles')
@@ -126,7 +128,7 @@ export default function UserManagement() {
     }
   };
 
-  const getRoleBadgeVariant = (role: string) => {
+  const getRoleBadgeVariant = (role: UserRole) => {
     switch (role) {
       case 'admin':
         return 'destructive';
@@ -181,9 +183,9 @@ export default function UserManagement() {
                       <Badge variant={getRoleBadgeVariant(user.role)}>
                         {user.role.replace('_', ' ').toUpperCase()}
                       </Badge>
-                      {user.departments && (
+                      {user.department && (
                         <Badge variant="outline">
-                          {user.departments.name}
+                          {user.department.name}
                         </Badge>
                       )}
                     </div>
@@ -191,7 +193,7 @@ export default function UserManagement() {
                   <div className="flex items-center gap-2">
                     <select
                       value={user.role}
-                      onChange={(e) => updateUserRole(user.id, e.target.value)}
+                      onChange={(e) => updateUserRole(user.id, e.target.value as UserRole)}
                       className="px-3 py-1 border rounded-md text-sm"
                     >
                       <option value="employee">Employee</option>
