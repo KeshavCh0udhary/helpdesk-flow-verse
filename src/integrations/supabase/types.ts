@@ -9,7 +9,227 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      agent_queue: {
+        Row: {
+          current_index: number | null
+          department_id: string
+          ordered_agent_ids: string[] | null
+        }
+        Insert: {
+          current_index?: number | null
+          department_id: string
+          ordered_agent_ids?: string[] | null
+        }
+        Update: {
+          current_index?: number | null
+          department_id?: string
+          ordered_agent_ids?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "agent_queue_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: true
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      attachments: {
+        Row: {
+          comment_id: string | null
+          created_at: string | null
+          file_name: string
+          id: string
+          mime_type: string | null
+          size_bytes: number | null
+          storage_path: string
+          ticket_id: string | null
+          uploaded_by_user_id: string
+        }
+        Insert: {
+          comment_id?: string | null
+          created_at?: string | null
+          file_name: string
+          id?: string
+          mime_type?: string | null
+          size_bytes?: number | null
+          storage_path: string
+          ticket_id?: string | null
+          uploaded_by_user_id: string
+        }
+        Update: {
+          comment_id?: string | null
+          created_at?: string | null
+          file_name?: string
+          id?: string
+          mime_type?: string | null
+          size_bytes?: number | null
+          storage_path?: string
+          ticket_id?: string | null
+          uploaded_by_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attachments_comment_id_fkey"
+            columns: ["comment_id"]
+            isOneToOne: false
+            referencedRelation: "comments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attachments_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comments: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          ticket_id: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          id?: string
+          ticket_id: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          ticket_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comments_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      departments: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          name: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          department_id: string | null
+          email: string
+          full_name: string
+          id: string
+          role: Database["public"]["Enums"]["user_role"]
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          department_id?: string | null
+          email: string
+          full_name: string
+          id: string
+          role?: Database["public"]["Enums"]["user_role"]
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          department_id?: string | null
+          email?: string
+          full_name?: string
+          id?: string
+          role?: Database["public"]["Enums"]["user_role"]
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profiles_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tickets: {
+        Row: {
+          assigned_to_agent_id: string | null
+          created_at: string | null
+          created_by_user_id: string
+          department_id: string
+          description: string
+          id: string
+          priority: Database["public"]["Enums"]["ticket_priority"] | null
+          resolved_at: string | null
+          status: Database["public"]["Enums"]["ticket_status"] | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          assigned_to_agent_id?: string | null
+          created_at?: string | null
+          created_by_user_id: string
+          department_id: string
+          description: string
+          id?: string
+          priority?: Database["public"]["Enums"]["ticket_priority"] | null
+          resolved_at?: string | null
+          status?: Database["public"]["Enums"]["ticket_status"] | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          assigned_to_agent_id?: string | null
+          created_at?: string | null
+          created_by_user_id?: string
+          department_id?: string
+          description?: string
+          id?: string
+          priority?: Database["public"]["Enums"]["ticket_priority"] | null
+          resolved_at?: string | null
+          status?: Database["public"]["Enums"]["ticket_status"] | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -18,7 +238,9 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      ticket_priority: "low" | "medium" | "high" | "urgent"
+      ticket_status: "open" | "in_progress" | "resolved" | "closed"
+      user_role: "admin" | "employee" | "support_agent"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -133,6 +355,10 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      ticket_priority: ["low", "medium", "high", "urgent"],
+      ticket_status: ["open", "in_progress", "resolved", "closed"],
+      user_role: ["admin", "employee", "support_agent"],
+    },
   },
 } as const
