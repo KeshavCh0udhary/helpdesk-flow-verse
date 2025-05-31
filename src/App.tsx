@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -18,6 +17,7 @@ import QueueManagement from "./pages/QueueManagement";
 import TicketManagement from "./pages/TicketManagement";
 import Unauthorized from "./pages/Unauthorized";
 import NotFound from "./pages/NotFound";
+import DepartmentManagement from "./pages/DepartmentManagement";
 
 const queryClient = new QueryClient();
 
@@ -62,6 +62,13 @@ const App = () => (
               <ProtectedRoute allowedRoles={['admin']}>
                 <Navbar />
                 <AddAgent />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/admin/department-management" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <Navbar />
+                <DepartmentManagement />
               </ProtectedRoute>
             } />
 
