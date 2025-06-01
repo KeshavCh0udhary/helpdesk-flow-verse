@@ -51,8 +51,8 @@ export const TicketList = () => {
           priority,
           created_at,
           departments!inner(name),
-          creator:profiles!created_by_user_id(full_name),
-          agent:profiles!assigned_to_agent_id(full_name)
+          profiles!tickets_created_by_user_id_fkey(full_name),
+          assigned_agent:profiles!tickets_assigned_to_agent_id_fkey(full_name)
         `);
 
       // Filter based on user role
@@ -78,8 +78,8 @@ export const TicketList = () => {
         priority: ticket.priority as TicketPriority,
         created_at: ticket.created_at,
         department: ticket.departments ? { name: ticket.departments.name } : null,
-        created_by_user: ticket.creator ? { full_name: ticket.creator.full_name } : null,
-        assigned_to_agent: ticket.agent ? { full_name: ticket.agent.full_name } : null,
+        created_by_user: ticket.profiles ? { full_name: ticket.profiles.full_name } : null,
+        assigned_to_agent: ticket.assigned_agent ? { full_name: ticket.assigned_agent.full_name } : null,
       }));
       
       setTickets(mappedTickets);
