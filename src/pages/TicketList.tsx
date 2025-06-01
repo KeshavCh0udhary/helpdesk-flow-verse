@@ -22,14 +22,17 @@ interface Ticket {
   department: { name: string };
 }
 
+type StatusFilter = 'all' | 'open' | 'closed' | 'in_progress' | 'resolved' | 'unassigned';
+type PriorityFilter = 'all' | 'urgent' | 'high' | 'medium' | 'low';
+
 export const TicketList = () => {
   const { user } = useAuth();
   const [searchParams] = useSearchParams();
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') || 'all');
-  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(searchParams.get('status') as StatusFilter || 'all');
+  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -37,11 +40,11 @@ export const TicketList = () => {
     const priorityParam = params.get('priority');
     const searchParam = params.get('search');
 
-    if (statusParam && ['open', 'closed', 'in_progress', 'resolved'].includes(statusParam)) {
-      setStatusFilter(statusParam as 'open' | 'closed' | 'in_progress' | 'resolved');
+    if (statusParam && ['open', 'closed', 'in_progress', 'resolved', 'unassigned'].includes(statusParam)) {
+      setStatusFilter(statusParam as StatusFilter);
     }
     if (priorityParam && ['high', 'low', 'medium', 'urgent'].includes(priorityParam)) {
-      setPriorityFilter(priorityParam as 'high' | 'low' | 'medium' | 'urgent');
+      setPriorityFilter(priorityParam as PriorityFilter);
     }
     if (searchParam) {
       setSearchTerm(searchParam);
@@ -182,7 +185,7 @@ export const TicketList = () => {
             className="pl-10"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)}>
           <SelectTrigger>
             <SelectValue placeholder="Filter by status" />
           </SelectTrigger>
@@ -195,7 +198,7 @@ export const TicketList = () => {
             <SelectItem value="unassigned">Unassigned</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+        <Select value={priorityFilter} onValueChange={(value) => setPriorityFilter(value as PriorityFilter)}>
           <SelectTrigger>
             <SelectValue placeholder="Filter by priority" />
           </SelectTrigger>
