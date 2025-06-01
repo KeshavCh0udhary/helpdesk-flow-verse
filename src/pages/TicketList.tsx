@@ -10,7 +10,7 @@ import { EmptyTicketState } from '@/components/tickets/EmptyTicketState';
 import { useTickets } from '@/hooks/useTickets';
 import { filterTickets } from '@/utils/ticketUtils';
 
-export const TicketList = () => {
+const TicketList = () => {
   const { profile } = useAuth();
   const { tickets, loading } = useTickets(profile);
   const [searchTerm, setSearchTerm] = useState('');
@@ -65,3 +65,5 @@ export const TicketList = () => {
     </div>
   );
 };
+
+export default TicketList;
