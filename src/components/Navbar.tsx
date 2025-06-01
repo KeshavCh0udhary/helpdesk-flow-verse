@@ -30,7 +30,7 @@ import {
 import { NotificationBell } from './NotificationBell';
 
 export const Navbar = () => {
-  const { user, signOut, userRole } = useAuth();
+  const { user, signOut, profile } = useAuth();
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -88,7 +88,7 @@ export const Navbar = () => {
   }
 
   const filteredNavigationItems = navigationItems.filter(item => 
-    item.roles.includes(userRole as string)
+    item.roles.includes(profile?.role as string)
   );
 
   return (
@@ -126,7 +126,7 @@ export const Navbar = () => {
             <NotificationBell />
             
             {/* Admin Dropdown */}
-            {userRole === 'admin' && (
+            {profile?.role === 'admin' && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm">
@@ -211,7 +211,7 @@ export const Navbar = () => {
                 );
               })}
               
-              {userRole === 'admin' && (
+              {profile?.role === 'admin' && (
                 <>
                   <div className="border-t border-gray-200 pt-4 pb-3">
                     <div className="px-4 text-sm font-medium text-gray-500 uppercase tracking-wider">

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -48,11 +47,11 @@ export const PatternInsights = () => {
 
       if (error) throw error;
 
-      // Transform the data to match our interface
+      // Transform the data to match our interface with proper type checking
       const transformedPatterns = (data || []).map(item => ({
         id: item.id,
         pattern_type: item.pattern_type,
-        pattern_data: item.pattern_data as PatternData,
+        pattern_data: item.pattern_data as unknown as PatternData,
         confidence_score: item.confidence_score,
         impact_level: item.impact_level,
         status: item.status,
