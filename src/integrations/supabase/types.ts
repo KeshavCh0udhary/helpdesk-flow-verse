@@ -35,6 +35,66 @@ export type Database = {
           },
         ]
       }
+      ai_interactions: {
+        Row: {
+          ai_response: string | null
+          confidence_score: number | null
+          created_at: string
+          id: string
+          input_text: string
+          interaction_type: string
+          knowledge_base_id: string | null
+          metadata: Json | null
+          session_id: string
+          ticket_id: string | null
+          user_id: string | null
+          was_helpful: boolean | null
+        }
+        Insert: {
+          ai_response?: string | null
+          confidence_score?: number | null
+          created_at?: string
+          id?: string
+          input_text: string
+          interaction_type: string
+          knowledge_base_id?: string | null
+          metadata?: Json | null
+          session_id: string
+          ticket_id?: string | null
+          user_id?: string | null
+          was_helpful?: boolean | null
+        }
+        Update: {
+          ai_response?: string | null
+          confidence_score?: number | null
+          created_at?: string
+          id?: string
+          input_text?: string
+          interaction_type?: string
+          knowledge_base_id?: string | null
+          metadata?: Json | null
+          session_id?: string
+          ticket_id?: string | null
+          user_id?: string | null
+          was_helpful?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_interactions_knowledge_base_id_fkey"
+            columns: ["knowledge_base_id"]
+            isOneToOne: false
+            referencedRelation: "knowledge_base"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_interactions_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attachments: {
         Row: {
           comment_id: string | null
@@ -142,6 +202,51 @@ export type Database = {
         }
         Relationships: []
       }
+      knowledge_base: {
+        Row: {
+          category: string
+          content: string
+          created_at: string
+          created_by_user_id: string
+          effectiveness_score: number | null
+          embedding: string | null
+          id: string
+          is_active: boolean | null
+          tags: string[] | null
+          title: string
+          updated_at: string
+          usage_count: number | null
+        }
+        Insert: {
+          category: string
+          content: string
+          created_at?: string
+          created_by_user_id: string
+          effectiveness_score?: number | null
+          embedding?: string | null
+          id?: string
+          is_active?: boolean | null
+          tags?: string[] | null
+          title: string
+          updated_at?: string
+          usage_count?: number | null
+        }
+        Update: {
+          category?: string
+          content?: string
+          created_at?: string
+          created_by_user_id?: string
+          effectiveness_score?: number | null
+          embedding?: string | null
+          id?: string
+          is_active?: boolean | null
+          tags?: string[] | null
+          title?: string
+          updated_at?: string
+          usage_count?: number | null
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           comment_id: string | null
@@ -196,6 +301,42 @@ export type Database = {
           },
         ]
       }
+      pattern_analysis: {
+        Row: {
+          confidence_score: number
+          detected_at: string
+          id: string
+          impact_level: string
+          metadata: Json | null
+          pattern_data: Json
+          pattern_type: string
+          resolved_at: string | null
+          status: string | null
+        }
+        Insert: {
+          confidence_score: number
+          detected_at?: string
+          id?: string
+          impact_level: string
+          metadata?: Json | null
+          pattern_data: Json
+          pattern_type: string
+          resolved_at?: string | null
+          status?: string | null
+        }
+        Update: {
+          confidence_score?: number
+          detected_at?: string
+          id?: string
+          impact_level?: string
+          metadata?: Json | null
+          pattern_data?: Json
+          pattern_type?: string
+          resolved_at?: string | null
+          status?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string | null
@@ -234,42 +375,110 @@ export type Database = {
           },
         ]
       }
+      response_templates: {
+        Row: {
+          category: string
+          content: string
+          created_at: string
+          created_by_user_id: string
+          department_id: string | null
+          effectiveness_score: number | null
+          embedding: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          tags: string[] | null
+          updated_at: string
+          usage_count: number | null
+        }
+        Insert: {
+          category: string
+          content: string
+          created_at?: string
+          created_by_user_id: string
+          department_id?: string | null
+          effectiveness_score?: number | null
+          embedding?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          tags?: string[] | null
+          updated_at?: string
+          usage_count?: number | null
+        }
+        Update: {
+          category?: string
+          content?: string
+          created_at?: string
+          created_by_user_id?: string
+          department_id?: string | null
+          effectiveness_score?: number | null
+          embedding?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          tags?: string[] | null
+          updated_at?: string
+          usage_count?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "response_templates_department_id_fkey"
+            columns: ["department_id"]
+            isOneToOne: false
+            referencedRelation: "departments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tickets: {
         Row: {
+          ai_routing_metadata: Json | null
+          ai_suggested_responses: string[] | null
           assigned_to_agent_id: string | null
           created_at: string | null
           created_by_user_id: string
           department_id: string
           description: string
+          embedding: string | null
           id: string
           priority: Database["public"]["Enums"]["ticket_priority"] | null
           resolved_at: string | null
+          routing_confidence: number | null
           status: Database["public"]["Enums"]["ticket_status"] | null
           title: string
           updated_at: string | null
         }
         Insert: {
+          ai_routing_metadata?: Json | null
+          ai_suggested_responses?: string[] | null
           assigned_to_agent_id?: string | null
           created_at?: string | null
           created_by_user_id: string
           department_id: string
           description: string
+          embedding?: string | null
           id?: string
           priority?: Database["public"]["Enums"]["ticket_priority"] | null
           resolved_at?: string | null
+          routing_confidence?: number | null
           status?: Database["public"]["Enums"]["ticket_status"] | null
           title: string
           updated_at?: string | null
         }
         Update: {
+          ai_routing_metadata?: Json | null
+          ai_suggested_responses?: string[] | null
           assigned_to_agent_id?: string | null
           created_at?: string | null
           created_by_user_id?: string
           department_id?: string
           description?: string
+          embedding?: string | null
           id?: string
           priority?: Database["public"]["Enums"]["ticket_priority"] | null
           resolved_at?: string | null
+          routing_confidence?: number | null
           status?: Database["public"]["Enums"]["ticket_status"] | null
           title?: string
           updated_at?: string | null
@@ -289,6 +498,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      binary_quantize: {
+        Args: { "": string } | { "": unknown }
+        Returns: unknown
+      }
       create_notification: {
         Args: {
           p_user_id: string
@@ -307,6 +520,123 @@ export type Database = {
       get_next_agent_in_queue: {
         Args: { dept_id: string }
         Returns: string
+      }
+      halfvec_avg: {
+        Args: { "": number[] }
+        Returns: unknown
+      }
+      halfvec_out: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      halfvec_send: {
+        Args: { "": unknown }
+        Returns: string
+      }
+      halfvec_typmod_in: {
+        Args: { "": unknown[] }
+        Returns: number
+      }
+      hnsw_bit_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      hnsw_halfvec_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      hnsw_sparsevec_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      hnswhandler: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      ivfflat_bit_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      ivfflat_halfvec_support: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      ivfflathandler: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      l2_norm: {
+        Args: { "": unknown } | { "": unknown }
+        Returns: number
+      }
+      l2_normalize: {
+        Args: { "": string } | { "": unknown } | { "": unknown }
+        Returns: string
+      }
+      similarity_search_knowledge_base: {
+        Args: {
+          query_embedding: string
+          match_threshold?: number
+          match_count?: number
+        }
+        Returns: {
+          id: string
+          title: string
+          content: string
+          category: string
+          similarity: number
+        }[]
+      }
+      similarity_search_response_templates: {
+        Args: {
+          query_embedding: string
+          dept_id?: string
+          match_threshold?: number
+          match_count?: number
+        }
+        Returns: {
+          id: string
+          name: string
+          content: string
+          category: string
+          similarity: number
+        }[]
+      }
+      sparsevec_out: {
+        Args: { "": unknown }
+        Returns: unknown
+      }
+      sparsevec_send: {
+        Args: { "": unknown }
+        Returns: string
+      }
+      sparsevec_typmod_in: {
+        Args: { "": unknown[] }
+        Returns: number
+      }
+      vector_avg: {
+        Args: { "": number[] }
+        Returns: string
+      }
+      vector_dims: {
+        Args: { "": string } | { "": unknown }
+        Returns: number
+      }
+      vector_norm: {
+        Args: { "": string }
+        Returns: number
+      }
+      vector_out: {
+        Args: { "": string }
+        Returns: unknown
+      }
+      vector_send: {
+        Args: { "": string }
+        Returns: string
+      }
+      vector_typmod_in: {
+        Args: { "": unknown[] }
+        Returns: number
       }
     }
     Enums: {

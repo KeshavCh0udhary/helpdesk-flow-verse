@@ -3,12 +3,14 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, Settings, BarChart3 } from 'lucide-react';
+import { Users, Settings, BarChart3, Bot } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { AnalyticsDashboard } from '@/components/admin/AnalyticsDashboard';
 import { StatsOverview } from '@/components/admin/StatsOverview';
 import { QuickActions } from '@/components/admin/QuickActions';
 import { SystemStatus } from '@/components/admin/SystemStatus';
+import { PatternInsights } from '@/components/ai/PatternInsights';
+import { KnowledgeBaseManager } from '@/components/ai/KnowledgeBaseManager';
 
 interface Stats {
   totalTickets: number;
@@ -76,7 +78,7 @@ export const AdminDashboard = () => {
       <div className="flex flex-col space-y-4 mb-6 sm:flex-row sm:justify-between sm:items-center sm:space-y-0">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Admin Dashboard</h1>
-          <p className="text-gray-600">Overview of your helpdesk system</p>
+          <p className="text-gray-600">Overview of your AI-powered helpdesk system</p>
         </div>
         <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2">
           <Link to="/admin/add-agent">
@@ -84,6 +86,13 @@ export const AdminDashboard = () => {
               <Users className="h-4 w-4 mr-2" />
               <span className="sm:hidden">Add Agent</span>
               <span className="hidden sm:inline">Add Agent</span>
+            </Button>
+          </Link>
+          <Link to="/knowledge-base">
+            <Button variant="outline" className="w-full sm:w-auto">
+              <Bot className="h-4 w-4 mr-2" />
+              <span className="sm:hidden">Knowledge Base</span>
+              <span className="hidden sm:inline">Manage Knowledge Base</span>
             </Button>
           </Link>
           <Link to="/admin/department-management">
@@ -107,6 +116,8 @@ export const AdminDashboard = () => {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
+          <TabsTrigger value="ai-insights">AI Insights</TabsTrigger>
+          <TabsTrigger value="knowledge-base">Knowledge Base</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -120,6 +131,14 @@ export const AdminDashboard = () => {
 
         <TabsContent value="analytics">
           <AnalyticsDashboard />
+        </TabsContent>
+
+        <TabsContent value="ai-insights" className="space-y-6">
+          <PatternInsights />
+        </TabsContent>
+
+        <TabsContent value="knowledge-base">
+          <KnowledgeBaseManager />
         </TabsContent>
       </Tabs>
     </div>
