@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -175,9 +174,8 @@ export const EnhancedComments = ({ ticketId, ticket }: EnhancedCommentsProps) =>
     }
   };
 
-  const handleFileUpload = async (files: File[]) => {
-    // Handle file upload logic here
-    console.log('Files uploaded:', files);
+  const handleFileUpload = async (file: { id: string; file_name: string; size_bytes: number; storage_path: string }) => {
+    console.log('File uploaded:', file);
     setShowFileUpload(false);
   };
 
@@ -282,8 +280,9 @@ export const EnhancedComments = ({ ticketId, ticket }: EnhancedCommentsProps) =>
             {showFileUpload && (
               <FileUpload
                 ticketId={ticketId}
-                onUploadComplete={handleFileUpload}
-                maxFiles={5}
+                onFileUploaded={handleFileUpload}
+                maxFileSize={10}
+                allowedTypes={['image/*', 'application/pdf', '.doc', '.docx', '.txt']}
               />
             )}
           </div>
