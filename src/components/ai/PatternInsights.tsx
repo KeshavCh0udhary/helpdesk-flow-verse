@@ -7,19 +7,21 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Loader2, TrendingUp, AlertTriangle, CheckCircle, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
+interface PatternData {
+  title: string;
+  description: string;
+  recommendations: string[];
+  metrics: {
+    count: number;
+    percentage: number;
+    time_period: string;
+  };
+}
+
 interface Pattern {
   id: string;
   pattern_type: string;
-  pattern_data: {
-    title: string;
-    description: string;
-    recommendations: string[];
-    metrics: {
-      count: number;
-      percentage: number;
-      time_period: string;
-    };
-  };
+  pattern_data: PatternData;
   confidence_score: number;
   impact_level: string;
   status: string;
@@ -46,7 +48,18 @@ export const PatternInsights = () => {
 
       if (error) throw error;
 
-      setPatterns(data || []);
+      // Transform the data to match our interface
+      const transformedPatterns = (data || []).map(item => ({
+        id: item.id,
+        pattern_type: item.pattern_type,
+        pattern_data: item.pattern_data as PatternData,
+        confidence_score: item.confidence_score,
+        impact_level: item.impact_level,
+        status: item.status,
+        detected_at: item.detected_at
+      }));
+
+      setPatterns(transformedPatterns);
     } catch (error) {
       console.error('Error fetching patterns:', error);
     } finally {

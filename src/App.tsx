@@ -16,7 +16,7 @@ const Signup = lazy(() => import('./pages/Signup'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const CreateTicket = lazy(() => import('./pages/CreateTicket'));
 const TicketDetails = lazy(() => import('./pages/TicketDetails'));
-const TicketList = lazy(() => import('./pages/TicketList'));
+const TicketList = lazy(() => import('./pages/TicketList').then(module => ({ default: module.default })));
 const AddAgent = lazy(() => import('./pages/AddAgent'));
 const DepartmentManagement = lazy(() => import('./pages/DepartmentManagement'));
 const QueueManagement = lazy(() => import('./pages/QueueManagement'));

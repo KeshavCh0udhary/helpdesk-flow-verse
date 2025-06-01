@@ -1,6 +1,6 @@
 
 import { useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { 
@@ -8,61 +8,59 @@ import {
   DropdownMenuContent, 
   DropdownMenuItem, 
   DropdownMenuTrigger,
-  DropdownMenuSeparator
+  DropdownMenuSeparator 
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { 
-  Menu, 
-  Home, 
-  Ticket, 
-  Users, 
-  BarChart3, 
+  User, 
+  Settings, 
   LogOut, 
-  Settings,
+  Menu, 
+  X,
+  Home,
+  Ticket,
+  Plus,
   Search,
+  BarChart3,
+  Users,
+  Building2,
+  FileText,
   Bot,
-  Book
+  Brain
 } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
 
 export const Navbar = () => {
-  const { user, profile, signOut } = useAuth();
+  const { user, signOut, userRole } = useAuth();
   const location = useLocation();
-  const navigate = useNavigate();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const handleSignOut = async () => {
-    await signOut();
-    navigate('/login');
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Error signing out:', error);
+    }
   };
 
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(word => word[0])
-      .join('')
-      .toUpperCase()
-      .slice(0, 2);
-  };
+  const isActive = (path: string) => location.pathname === path;
 
-  const isActiveRoute = (path: string) => {
-    return location.pathname === path;
-  };
-
-  const navigation = [
-    { name: 'Dashboard', href: '/dashboard', icon: Home },
-    { name: 'Tickets', href: '/tickets', icon: Ticket },
-    { name: 'AI Assistant', href: '/ai-bot', icon: Bot },
-    { name: 'Search', href: '/search', icon: Search },
+  const navigationItems = [
+    { path: '/dashboard', label: 'Dashboard', icon: Home, roles: ['admin', 'support_agent', 'employee'] },
+    { path: '/tickets', label: 'Tickets', icon: Ticket, roles: ['admin', 'support_agent', 'employee'] },
+    { path: '/tickets/new', label: 'New Ticket', icon: Plus, roles: ['admin', 'support_agent', 'employee'] },
+    { path: '/ai-bot', label: 'AI Assistant', icon: Bot, roles: ['admin', 'support_agent', 'employee'] },
+    { path: '/knowledge-base', label: 'Knowledge Base', icon: Brain, roles: ['admin', 'support_agent'] },
+    { path: '/search', label: 'Search', icon: Search, roles: ['admin', 'support_agent', 'employee'] },
+    { path: '/reports', label: 'Reports', icon: BarChart3, roles: ['admin', 'support_agent'] },
   ];
 
-  const adminNavigation = [
-    { name: 'User Management', href: '/admin/user-management', icon: Users },
-    { name: 'Ticket Management', href: '/admin/ticket-management', icon: Ticket },
-    { name: 'Knowledge Base', href: '/knowledge-base', icon: Book },
-    { name: 'Reports', href: '/reports', icon: BarChart3 },
-    { name: 'Settings', href: '/admin/department-management', icon: Settings },
+  const adminItems = [
+    { path: '/admin/user-management', label: 'Users', icon: Users },
+    { path: '/admin/department-management', label: 'Departments', icon: Building2 },
+    { path: '/admin/queue-management', label: 'Queues', icon: FileText },
+    { path: '/admin/ticket-management', label: 'Ticket Management', icon: Ticket },
+    { path: '/admin/add-agent', label: 'Add Agent', icon: Plus },
+    { path: '/admin/file-management', label: 'Files', icon: FileText },
   ];
 
   if (!user) {
@@ -71,13 +69,13 @@ export const Navbar = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16">
             <div className="flex items-center">
-              <Link to="/" className="text-xl font-bold text-gray-900">
+              <Link to="/" className="text-xl font-bold text-blue-600">
                 HelpDesk Pro
               </Link>
             </div>
             <div className="flex items-center space-x-4">
               <Link to="/login">
-                <Button variant="ghost">Sign In</Button>
+                <Button variant="ghost">Login</Button>
               </Link>
               <Link to="/signup">
                 <Button>Sign Up</Button>
@@ -89,178 +87,158 @@ export const Navbar = () => {
     );
   }
 
+  const filteredNavigationItems = navigationItems.filter(item => 
+    item.roles.includes(userRole as string)
+  );
+
   return (
-    <nav className="bg-white shadow-sm border-b sticky top-0 z-50">
+    <nav className="bg-white shadow-sm border-b">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16">
-          {/* Logo and Desktop Navigation */}
           <div className="flex items-center">
-            <Link to="/dashboard" className="text-xl font-bold text-gray-900 mr-8">
-              HelpDesk Pro AI
+            <Link to="/dashboard" className="text-xl font-bold text-blue-600">
+              HelpDesk Pro
             </Link>
             
             {/* Desktop Navigation */}
-            <div className="hidden md:flex space-x-4">
-              {navigation.map((item) => (
-                <Link
-                  key={item.name}
-                  to={item.href}
-                  className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    isActiveRoute(item.href)
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                  }`}
-                >
-                  <item.icon className="h-4 w-4 mr-2" />
-                  {item.name}
-                </Link>
-              ))}
+            <div className="hidden md:ml-10 md:flex md:space-x-8">
+              {filteredNavigationItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={`inline-flex items-center px-1 pt-1 text-sm font-medium border-b-2 transition-colors ${
+                      isActive(item.path)
+                        ? 'border-blue-500 text-gray-900'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    }`}
+                  >
+                    <Icon className="h-4 w-4 mr-2" />
+                    {item.label}
+                  </Link>
+                );
+              })}
             </div>
           </div>
 
-          {/* Right side - Notifications and User Menu */}
           <div className="flex items-center space-x-4">
             <NotificationBell />
             
-            {/* Desktop User Menu */}
-            <div className="hidden md:block">
+            {/* Admin Dropdown */}
+            {userRole === 'admin' && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                    <Avatar className="h-8 w-8">
-                      <AvatarFallback>
-                        {profile?.full_name ? getInitials(profile.full_name) : 'U'}
-                      </AvatarFallback>
-                    </Avatar>
+                  <Button variant="ghost" size="sm">
+                    <Settings className="h-4 w-4 mr-2" />
+                    Admin
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-56" align="end" forceMount>
-                  <div className="flex flex-col space-y-1 p-2">
-                    <p className="text-sm font-medium leading-none">
-                      {profile?.full_name || 'User'}
-                    </p>
-                    <p className="text-xs leading-none text-muted-foreground">
-                      {profile?.email}
-                    </p>
-                    <p className="text-xs leading-none text-muted-foreground capitalize">
-                      {profile?.role}
-                    </p>
-                  </div>
-                  <DropdownMenuSeparator />
-                  
-                  {(profile?.role === 'admin' || profile?.role === 'support_agent') && (
-                    <>
-                      {adminNavigation.map((item) => (
-                        <DropdownMenuItem key={item.name} asChild>
-                          <Link to={item.href} className="cursor-pointer">
-                            <item.icon className="h-4 w-4 mr-2" />
-                            {item.name}
-                          </Link>
-                        </DropdownMenuItem>
-                      ))}
-                      <DropdownMenuSeparator />
-                    </>
-                  )}
-                  
-                  <DropdownMenuItem onClick={handleSignOut} className="cursor-pointer">
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Sign Out
-                  </DropdownMenuItem>
+                <DropdownMenuContent align="end" className="w-56">
+                  {adminItems.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <DropdownMenuItem key={item.path} asChild>
+                        <Link to={item.path} className="flex items-center">
+                          <Icon className="h-4 w-4 mr-2" />
+                          {item.label}
+                        </Link>
+                      </DropdownMenuItem>
+                    );
+                  })}
                 </DropdownMenuContent>
               </DropdownMenu>
-            </div>
+            )}
 
-            {/* Mobile Menu */}
+            {/* User Menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm">
+                  <User className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem disabled>
+                  Signed in as {user.email}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleSignOut}>
+                  <LogOut className="h-4 w-4 mr-2" />
+                  Sign out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* Mobile Menu Button */}
             <div className="md:hidden">
-              <Sheet open={isOpen} onOpenChange={setIsOpen}>
-                <SheetTrigger asChild>
-                  <Button variant="ghost" size="sm">
-                    <Menu className="h-5 w-5" />
-                  </Button>
-                </SheetTrigger>
-                <SheetContent side="right" className="w-80">
-                  <div className="flex flex-col space-y-4 mt-6">
-                    {/* User Info */}
-                    <div className="flex items-center space-x-3 pb-4 border-b">
-                      <Avatar className="h-10 w-10">
-                        <AvatarFallback>
-                          {profile?.full_name ? getInitials(profile.full_name) : 'U'}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="text-sm font-medium">
-                          {profile?.full_name || 'User'}
-                        </p>
-                        <p className="text-xs text-muted-foreground capitalize">
-                          {profile?.role}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Main Navigation */}
-                    <div className="space-y-2">
-                      {navigation.map((item) => (
-                        <Link
-                          key={item.name}
-                          to={item.href}
-                          onClick={() => setIsOpen(false)}
-                          className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                            isActiveRoute(item.href)
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                          }`}
-                        >
-                          <item.icon className="h-4 w-4 mr-2" />
-                          {item.name}
-                        </Link>
-                      ))}
-                    </div>
-
-                    {/* Admin Navigation */}
-                    {(profile?.role === 'admin' || profile?.role === 'support_agent') && (
-                      <>
-                        <div className="border-t pt-4">
-                          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-                            Administration
-                          </p>
-                          <div className="space-y-2">
-                            {adminNavigation.map((item) => (
-                              <Link
-                                key={item.name}
-                                to={item.href}
-                                onClick={() => setIsOpen(false)}
-                                className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                                  isActiveRoute(item.href)
-                                    ? 'bg-blue-100 text-blue-700'
-                                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
-                                }`}
-                              >
-                                <item.icon className="h-4 w-4 mr-2" />
-                                {item.name}
-                              </Link>
-                            ))}
-                          </div>
-                        </div>
-                      </>
-                    )}
-
-                    {/* Sign Out */}
-                    <div className="border-t pt-4">
-                      <Button
-                        variant="ghost"
-                        onClick={handleSignOut}
-                        className="w-full justify-start"
-                      >
-                        <LogOut className="h-4 w-4 mr-2" />
-                        Sign Out
-                      </Button>
-                    </div>
-                  </div>
-                </SheetContent>
-              </Sheet>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              >
+                {isMobileMenuOpen ? (
+                  <X className="h-6 w-6" />
+                ) : (
+                  <Menu className="h-6 w-6" />
+                )}
+              </Button>
             </div>
           </div>
         </div>
+
+        {/* Mobile Menu */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden">
+            <div className="pt-2 pb-3 space-y-1">
+              {filteredNavigationItems.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    className={`block pl-3 pr-4 py-2 text-base font-medium border-l-4 transition-colors ${
+                      isActive(item.path)
+                        ? 'bg-blue-50 border-blue-500 text-blue-700'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:bg-gray-50 hover:border-gray-300'
+                    }`}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    <div className="flex items-center">
+                      <Icon className="h-4 w-4 mr-3" />
+                      {item.label}
+                    </div>
+                  </Link>
+                );
+              })}
+              
+              {userRole === 'admin' && (
+                <>
+                  <div className="border-t border-gray-200 pt-4 pb-3">
+                    <div className="px-4 text-sm font-medium text-gray-500 uppercase tracking-wider">
+                      Admin
+                    </div>
+                  </div>
+                  {adminItems.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <Link
+                        key={item.path}
+                        to={item.path}
+                        className="block pl-3 pr-4 py-2 text-base font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                        onClick={() => setIsMobileMenuOpen(false)}
+                      >
+                        <div className="flex items-center">
+                          <Icon className="h-4 w-4 mr-3" />
+                          {item.label}
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </nav>
   );
