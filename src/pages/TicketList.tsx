@@ -51,8 +51,8 @@ export const TicketList = () => {
           priority,
           created_at,
           departments!inner(name),
-          creator:profiles!tickets_created_by_user_id_fkey(full_name),
-          agent:profiles!tickets_assigned_to_agent_id_fkey(full_name)
+          creator:profiles!created_by_user_id(full_name),
+          agent:profiles!assigned_to_agent_id(full_name)
         `);
 
       // Filter based on user role
