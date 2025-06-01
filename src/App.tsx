@@ -1,4 +1,3 @@
-
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -21,8 +20,7 @@ import TicketManagement from "@/pages/TicketManagement";
 import Unauthorized from "@/pages/Unauthorized";
 import NotFound from "@/pages/NotFound";
 import { TicketList } from "@/pages/TicketList";
-import { ProtectedRoute } from "@/components/ProtectedRoute";
-import { AdminDashboard } from "@/components/AdminDashboard";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import "./App.css";
 
 const queryClient = new QueryClient();

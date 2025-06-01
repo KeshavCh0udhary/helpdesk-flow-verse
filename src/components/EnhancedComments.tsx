@@ -175,8 +175,9 @@ export const EnhancedComments = ({ ticketId, ticket }: EnhancedCommentsProps) =>
     }
   };
 
-  const handleFileUpload = async (file: { id: string; file_name: string; size_bytes: number; storage_path: string }) => {
-    console.log('File uploaded:', file);
+  const handleFileUpload = async (files: File[]) => {
+    // Handle file upload logic here
+    console.log('Files uploaded:', files);
     setShowFileUpload(false);
   };
 
@@ -281,9 +282,8 @@ export const EnhancedComments = ({ ticketId, ticket }: EnhancedCommentsProps) =>
             {showFileUpload && (
               <FileUpload
                 ticketId={ticketId}
-                onFileUploaded={handleFileUpload}
-                maxFileSize={10}
-                allowedTypes={['image/*', 'application/pdf', '.doc', '.docx', '.txt']}
+                onUploadComplete={handleFileUpload}
+                maxFiles={5}
               />
             )}
           </div>
