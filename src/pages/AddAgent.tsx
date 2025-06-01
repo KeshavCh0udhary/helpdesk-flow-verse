@@ -90,32 +90,30 @@ export default function AddAgent() {
 
     setSubmitting(true);
     try {
-      // Create user in auth
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email,
-        password: 'temporary_password_123',
-        email_confirm: true,
-        user_metadata: {
-          full_name: fullName,
+      console.log('Calling create-agent function with:', { email, fullName, departmentId: selectedDepartment });
+
+      const { data, error } = await supabase.functions.invoke('create-agent', {
+        body: {
+          email,
+          fullName,
+          departmentId: selectedDepartment,
         },
       });
 
-      if (authError) throw authError;
+      console.log('Function response:', { data, error });
 
-      // Update profile with agent role and department
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({
-          role: 'support_agent',
-          department_id: selectedDepartment,
-        })
-        .eq('id', authData.user.id);
+      if (error) {
+        console.error('Function error:', error);
+        throw new Error(error.message || 'Failed to create agent');
+      }
 
-      if (profileError) throw profileError;
+      if (data?.error) {
+        throw new Error(data.error);
+      }
 
       toast({
         title: "Success",
-        description: "Support agent added successfully",
+        description: "Support agent added successfully. They will receive an email to set up their password.",
       });
 
       setEmail('');
@@ -138,12 +136,21 @@ export default function AddAgent() {
     if (!confirm('Are you sure you want to remove this agent?')) return;
 
     try {
-      const { error } = await supabase.auth.admin.deleteUser(agentId);
+      // For now, we'll just remove their agent role and department
+      // In production, you might want a separate Edge Function for this
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          role: 'employee',
+          department_id: null,
+        })
+        .eq('id', agentId);
+
       if (error) throw error;
 
       toast({
         title: "Success",
-        description: "Agent removed successfully",
+        description: "Agent role removed successfully",
       });
       fetchAgents();
     } catch (error: any) {
