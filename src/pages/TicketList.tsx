@@ -50,9 +50,9 @@ export const TicketList = () => {
           status,
           priority,
           created_at,
-          departments!inner(name),
-          profiles!tickets_created_by_user_id_fkey(full_name),
-          assigned_agent:profiles!tickets_assigned_to_agent_id_fkey(full_name)
+          created_by_user_id,
+          assigned_to_agent_id,
+          departments!inner(name)
         `);
 
       // Filter based on user role
@@ -65,12 +65,26 @@ export const TicketList = () => {
 
       query = query.order('created_at', { ascending: false });
 
-      const { data, error } = await query;
+      const { data: ticketsData, error } = await query;
 
       if (error) throw error;
       
+      // Now fetch user profiles separately
+      const userIds = new Set<string>();
+      ticketsData?.forEach(ticket => {
+        if (ticket.created_by_user_id) userIds.add(ticket.created_by_user_id);
+        if (ticket.assigned_to_agent_id) userIds.add(ticket.assigned_to_agent_id);
+      });
+
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, full_name')
+        .in('id', Array.from(userIds));
+
+      const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
+      
       // Map the data to match our interface
-      const mappedTickets: TicketItem[] = (data || []).map(ticket => ({
+      const mappedTickets: TicketItem[] = (ticketsData || []).map(ticket => ({
         id: ticket.id,
         title: ticket.title,
         description: ticket.description,
@@ -78,8 +92,12 @@ export const TicketList = () => {
         priority: ticket.priority as TicketPriority,
         created_at: ticket.created_at,
         department: ticket.departments ? { name: ticket.departments.name } : null,
-        created_by_user: ticket.profiles ? { full_name: ticket.profiles.full_name } : null,
-        assigned_to_agent: ticket.assigned_agent ? { full_name: ticket.assigned_agent.full_name } : null,
+        created_by_user: ticket.created_by_user_id 
+          ? { full_name: profilesMap.get(ticket.created_by_user_id)?.full_name || 'Unknown' }
+          : null,
+        assigned_to_agent: ticket.assigned_to_agent_id 
+          ? { full_name: profilesMap.get(ticket.assigned_to_agent_id)?.full_name || 'Unknown' }
+          : null,
       }));
       
       setTickets(mappedTickets);
