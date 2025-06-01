@@ -85,10 +85,10 @@ serve(async (req) => {
 
     console.log('Creating agent:', { email, fullName, departmentId })
 
-    // Create user using admin client
+    // Create user using admin client with a secure random password they'll never use
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
-      password: 'TempPassword123!', // User will need to reset
+      password: crypto.randomUUID() + crypto.randomUUID(), // Secure random password
       email_confirm: true,
       user_metadata: {
         full_name: fullName,
@@ -137,6 +137,43 @@ serve(async (req) => {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
         }
       )
+    }
+
+    // Generate password reset link for the new agent
+    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+      type: 'recovery',
+      email: email,
+      options: {
+        redirectTo: `${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.supabase.co')}/auth/v1/verify?redirect_to=${encodeURIComponent(new URL(req.url).origin + '/login')}`
+      }
+    })
+
+    if (linkError) {
+      console.error('Link generation error:', linkError)
+      // Don't fail the entire operation, but log the error
+      console.log('Agent created but password link failed to generate')
+    }
+
+    // Send welcome email with password creation link
+    if (linkData?.properties?.action_link) {
+      try {
+        const { error: notificationError } = await supabase.functions.invoke('send-notification', {
+          body: {
+            type: 'agent_created',
+            recipientEmail: email,
+            recipientName: fullName,
+            passwordResetLink: linkData.properties.action_link,
+          },
+        })
+
+        if (notificationError) {
+          console.error('Notification error:', notificationError)
+          // Don't fail the operation, just log
+        }
+      } catch (emailError) {
+        console.error('Email sending error:', emailError)
+        // Don't fail the operation, just log
+      }
     }
 
     console.log('Agent created successfully:', authData.user.id)

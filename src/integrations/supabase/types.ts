@@ -300,6 +300,10 @@ export type Database = {
         }
         Returns: string
       }
+      get_current_user_role: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
       get_next_agent_in_queue: {
         Args: { dept_id: string }
         Returns: string

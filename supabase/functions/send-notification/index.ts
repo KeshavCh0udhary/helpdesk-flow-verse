@@ -10,13 +10,14 @@ const corsHeaders = {
 };
 
 interface NotificationRequest {
-  type: 'ticket_assigned' | 'ticket_updated' | 'comment_added';
+  type: 'ticket_assigned' | 'ticket_updated' | 'comment_added' | 'agent_created';
   recipientEmail: string;
   recipientName: string;
-  ticketId: string;
-  ticketTitle: string;
+  ticketId?: string;
+  ticketTitle?: string;
   message?: string;
   senderName?: string;
+  passwordResetLink?: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -33,6 +34,21 @@ const handler = async (req: Request): Promise<Response> => {
     let htmlContent = '';
 
     switch (notification.type) {
+      case 'agent_created':
+        subject = `Welcome to HelpDesk Pro - Set Up Your Account`;
+        htmlContent = `
+          <h2>Welcome to HelpDesk Pro!</h2>
+          <p>Hello ${notification.recipientName},</p>
+          <p>Your support agent account has been created. To get started, you need to set up your password.</p>
+          <p><strong>Click the link below to create your password:</strong></p>
+          <p><a href="${notification.passwordResetLink}" style="background-color: #3B82F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: bold;">Set Up Password</a></p>
+          <p>Once you've set up your password, you can log in to the HelpDesk Pro system and start managing support tickets.</p>
+          <p><strong>Your login email:</strong> ${notification.recipientEmail}</p>
+          <p>If you have any questions, please contact your system administrator.</p>
+          <p>Best regards,<br>HelpDesk Pro Team</p>
+        `;
+        break;
+
       case 'ticket_assigned':
         subject = `New Ticket Assigned: ${notification.ticketTitle}`;
         htmlContent = `

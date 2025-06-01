@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -113,7 +112,7 @@ export default function AddAgent() {
 
       toast({
         title: "Success",
-        description: "Support agent added successfully. They will receive an email to set up their password.",
+        description: "Support agent added successfully! They will receive an email with instructions to set up their password.",
       });
 
       setEmail('');
