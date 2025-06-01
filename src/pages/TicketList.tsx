@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -51,9 +50,9 @@ export const TicketList = () => {
           status,
           priority,
           created_at,
-          department:department_id(name),
-          created_by_user:created_by_user_id(full_name),
-          assigned_to_agent:assigned_to_agent_id(full_name)
+          departments!inner(name),
+          creator:profiles!tickets_created_by_user_id_fkey(full_name),
+          agent:profiles!tickets_assigned_to_agent_id_fkey(full_name)
         `);
 
       // Filter based on user role
@@ -78,9 +77,9 @@ export const TicketList = () => {
         status: ticket.status as TicketStatus,
         priority: ticket.priority as TicketPriority,
         created_at: ticket.created_at,
-        department: ticket.department as { name: string } | null,
-        created_by_user: ticket.created_by_user as { full_name: string } | null,
-        assigned_to_agent: ticket.assigned_to_agent as { full_name: string } | null,
+        department: ticket.departments ? { name: ticket.departments.name } : null,
+        created_by_user: ticket.creator ? { full_name: ticket.creator.full_name } : null,
+        assigned_to_agent: ticket.agent ? { full_name: ticket.agent.full_name } : null,
       }));
       
       setTickets(mappedTickets);
