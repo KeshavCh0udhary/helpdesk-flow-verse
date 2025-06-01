@@ -51,9 +51,9 @@ export const TicketList = () => {
           status,
           priority,
           created_at,
-          department:departments(name),
-          created_by_user:profiles!tickets_created_by_user_id_fkey(full_name),
-          assigned_to_agent:profiles!tickets_assigned_to_agent_id_fkey(full_name)
+          department:department_id(name),
+          created_by_user:created_by_user_id(full_name),
+          assigned_to_agent:assigned_to_agent_id(full_name)
         `);
 
       // Filter based on user role
@@ -69,7 +69,21 @@ export const TicketList = () => {
       const { data, error } = await query;
 
       if (error) throw error;
-      setTickets(data || []);
+      
+      // Map the data to match our interface
+      const mappedTickets: TicketItem[] = (data || []).map(ticket => ({
+        id: ticket.id,
+        title: ticket.title,
+        description: ticket.description,
+        status: ticket.status as TicketStatus,
+        priority: ticket.priority as TicketPriority,
+        created_at: ticket.created_at,
+        department: ticket.department as { name: string } | null,
+        created_by_user: ticket.created_by_user as { full_name: string } | null,
+        assigned_to_agent: ticket.assigned_to_agent as { full_name: string } | null,
+      }));
+      
+      setTickets(mappedTickets);
     } catch (error) {
       console.error('Error fetching tickets:', error);
     } finally {
