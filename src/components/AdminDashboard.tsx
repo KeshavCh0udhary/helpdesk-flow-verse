@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Users, Settings } from 'lucide-react';
+import { Users, Settings, BarChart3 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { AnalyticsDashboard } from '@/components/admin/AnalyticsDashboard';
 import { StatsOverview } from '@/components/admin/StatsOverview';
@@ -73,28 +73,31 @@ export const AdminDashboard = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-col space-y-4 mb-6 sm:flex-row sm:justify-between sm:items-center sm:space-y-0">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Admin Dashboard</h1>
           <p className="text-gray-600">Overview of your helpdesk system</p>
         </div>
-        <div className="flex space-x-2">
+        <div className="flex flex-col space-y-2 sm:flex-row sm:space-y-0 sm:space-x-2">
           <Link to="/admin/add-agent">
-            <Button>
+            <Button className="w-full sm:w-auto">
               <Users className="h-4 w-4 mr-2" />
-              Add Agent
+              <span className="sm:hidden">Add Agent</span>
+              <span className="hidden sm:inline">Add Agent</span>
             </Button>
           </Link>
           <Link to="/admin/department-management">
-            <Button variant="outline">
+            <Button variant="outline" className="w-full sm:w-auto">
               <Settings className="h-4 w-4 mr-2" />
-              Manage Departments
+              <span className="sm:hidden">Departments</span>
+              <span className="hidden sm:inline">Manage Departments</span>
             </Button>
           </Link>
           <Link to="/admin/queue-management">
-            <Button variant="outline">
-              <Settings className="h-4 w-4 mr-2" />
-              Manage Queues
+            <Button variant="outline" className="w-full sm:w-auto">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              <span className="sm:hidden">Queues</span>
+              <span className="hidden sm:inline">Manage Queues</span>
             </Button>
           </Link>
         </div>
