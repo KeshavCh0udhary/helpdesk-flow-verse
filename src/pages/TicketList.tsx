@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
@@ -38,10 +39,10 @@ export const TicketList = () => {
     const searchParam = params.get('search');
 
     if (statusParam && ['open', 'closed', 'in_progress', 'resolved'].includes(statusParam)) {
-      setStatusFilter(statusParam as 'open' | 'closed' | 'in_progress' | 'resolved');
+      setStatusFilter(statusParam);
     }
     if (priorityParam && ['high', 'low', 'medium', 'urgent'].includes(priorityParam)) {
-      setPriorityFilter(priorityParam as 'high' | 'low' | 'medium' | 'urgent');
+      setPriorityFilter(priorityParam);
     }
     if (searchParam) {
       setSearchTerm(searchParam);
