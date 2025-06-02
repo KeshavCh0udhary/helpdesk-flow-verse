@@ -44,11 +44,11 @@ serve(async (req) => {
     const embeddingData = await embeddingResponse.json();
     const queryEmbedding = embeddingData.data[0].embedding;
 
-    // Search for relevant knowledge base entries
+    // Search for relevant knowledge base entries with higher threshold
     const { data: similarEntries, error: searchError } = await supabaseClient
       .rpc('similarity_search_knowledge_base', {
         query_embedding: queryEmbedding,
-        match_threshold: 0.7,
+        match_threshold: 0.8, // Increased threshold for better relevance
         match_count: 5
       });
 
@@ -56,27 +56,68 @@ serve(async (req) => {
       console.error('Knowledge base search error:', searchError);
     }
 
-    let context = '';
+    let contextChunks = '';
     let knowledgeBaseId = null;
+    const fallbackResponse = "I am unable to answer this question with the available information.";
 
     if (similarEntries && similarEntries.length > 0) {
-      context = similarEntries
-        .map(entry => `Title: ${entry.title}\nContent: ${entry.content}`)
+      // Format as numbered chunks for AI reference
+      contextChunks = similarEntries
+        .map((entry, index) => `Chunk ${index + 1}:\nTitle: ${entry.title}\nContent: ${entry.content}\nCategory: ${entry.category}`)
         .join('\n\n');
       knowledgeBaseId = similarEntries[0].id;
     }
 
-    // Generate AI response
-    const systemPrompt = `You are a helpful customer support AI assistant. Use the following knowledge base context to answer the user's question. If the context doesn't contain relevant information, provide a helpful general response and suggest the user contact support.
+    // If no relevant chunks found, return fallback immediately
+    if (!contextChunks.trim()) {
+      // Store the interaction with fallback response
+      await supabaseClient
+        .from('ai_interactions')
+        .insert({
+          user_id: userId,
+          session_id: sessionId,
+          interaction_type: 'answer_bot',
+          input_text: question,
+          ai_response: fallbackResponse,
+          confidence_score: 0,
+          knowledge_base_id: null,
+          metadata: {
+            similar_entries_count: 0,
+            fallback_used: true
+          }
+        });
 
-Knowledge Base Context:
-${context}
+      return new Response(
+        JSON.stringify({
+          answer: fallbackResponse,
+          confidence: 0,
+          sources: [],
+          sessionId,
+          usedFallback: true
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
-Instructions:
-- Be concise but comprehensive
-- If you can't answer from the context, be honest about it
-- Always be polite and professional
-- Suggest next steps when appropriate`;
+    // Restrictive system prompt
+    const systemPrompt = `You are an information retrieval assistant. Your primary role is to answer user questions strictly and exclusively using the information provided in the given context chunks. Your instructions are as follows:
+
+Respond only and exclusively using the information contained in the provided chunks. Do not introduce any information that is not present in the chunks.
+
+If the provided chunks do not contain sufficient information to answer the question, or if the chunks do not directly address the user's query, respond with: "I am unable to answer this question with the available information."
+
+Do not explain your answer or provide any additional commentary. Your responses should be concise and focused on addressing the user's query using only the provided information.
+
+Adhere to the context and limitations at all times. If any part of the question cannot be answered with the provided chunks, you must refrain from speculation or the use of external knowledge.
+
+If there are multiple chunks provided, integrate the information cohesively, but do not infer or create connections beyond what is explicitly stated in the chunks.
+
+If no chunks are provided or if they are insufficient, immediately default to the response outlined in instruction 2.
+
+Final Reminder: Your responses must be anchored solely in the content of the provided chunks. Any deviation from this rule should result in the default response.
+
+Context Chunks:
+${contextChunks}`;
 
     const chatResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -90,7 +131,7 @@ Instructions:
           { role: 'system', content: systemPrompt },
           { role: 'user', content: question }
         ],
-        temperature: 0.7,
+        temperature: 0.1, // Lower temperature for more consistent responses
         max_tokens: 500,
       }),
     });
@@ -101,7 +142,7 @@ Instructions:
     // Calculate confidence score based on similarity
     const confidenceScore = similarEntries && similarEntries.length > 0 
       ? similarEntries[0].similarity 
-      : 0.3;
+      : 0;
 
     // Store the interaction
     const { error: interactionError } = await supabaseClient
@@ -116,7 +157,8 @@ Instructions:
         knowledge_base_id: knowledgeBaseId,
         metadata: {
           similar_entries_count: similarEntries?.length || 0,
-          top_similarity: similarEntries?.[0]?.similarity || 0
+          top_similarity: similarEntries?.[0]?.similarity || 0,
+          chunks_provided: similarEntries?.length || 0
         }
       });
 
@@ -137,7 +179,8 @@ Instructions:
         answer: aiResponse,
         confidence: confidenceScore,
         sources: similarEntries?.slice(0, 3) || [],
-        sessionId
+        sessionId,
+        usedFallback: aiResponse === fallbackResponse
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );

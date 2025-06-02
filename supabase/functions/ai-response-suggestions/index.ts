@@ -64,12 +64,12 @@ serve(async (req) => {
     const embeddingData = await embeddingResponse.json();
     const queryEmbedding = embeddingData.data[0].embedding;
 
-    // Search for relevant response templates
+    // Search for relevant response templates with higher threshold
     const { data: templates, error: templateError } = await supabaseClient
       .rpc('similarity_search_response_templates', {
         query_embedding: queryEmbedding,
         dept_id: ticket.department_id,
-        match_threshold: 0.6,
+        match_threshold: 0.75, // Increased threshold
         match_count: 3
       });
 
@@ -77,11 +77,11 @@ serve(async (req) => {
       console.error('Template search error:', templateError);
     }
 
-    // Search knowledge base for context
+    // Search knowledge base for context with higher threshold
     const { data: knowledgeEntries, error: kbError } = await supabaseClient
       .rpc('similarity_search_knowledge_base', {
         query_embedding: queryEmbedding,
-        match_threshold: 0.7,
+        match_threshold: 0.8, // Increased threshold
         match_count: 3
       });
 
@@ -89,14 +89,23 @@ serve(async (req) => {
       console.error('Knowledge base search error:', kbError);
     }
 
-    // Prepare context for AI
-    const templateContext = templates && templates.length > 0
-      ? templates.map(t => `Template: ${t.name}\nContent: ${t.content}`).join('\n\n')
-      : 'No relevant templates found.';
+    // Format context as numbered chunks
+    let contextChunks = '';
+    let chunkCount = 0;
 
-    const knowledgeContext = knowledgeEntries && knowledgeEntries.length > 0
-      ? knowledgeEntries.map(k => `Knowledge: ${k.title}\nContent: ${k.content}`).join('\n\n')
-      : 'No relevant knowledge base entries found.';
+    if (templates && templates.length > 0) {
+      templates.forEach((template, index) => {
+        chunkCount++;
+        contextChunks += `Chunk ${chunkCount}:\nType: Response Template\nName: ${template.name}\nContent: ${template.content}\nCategory: ${template.category}\n\n`;
+      });
+    }
+
+    if (knowledgeEntries && knowledgeEntries.length > 0) {
+      knowledgeEntries.forEach((entry, index) => {
+        chunkCount++;
+        contextChunks += `Chunk ${chunkCount}:\nType: Knowledge Base\nTitle: ${entry.title}\nContent: ${entry.content}\nCategory: ${entry.category}\n\n`;
+      });
+    }
 
     const conversationHistory = ticket.comments && ticket.comments.length > 0
       ? ticket.comments
@@ -105,9 +114,58 @@ serve(async (req) => {
           .join('\n')
       : 'No previous comments.';
 
-    const suggestionPrompt = `As a customer support AI assistant, generate 3 helpful response suggestions for this ticket.
+    // If no relevant chunks found, return empty suggestions
+    if (!contextChunks.trim()) {
+      console.log(`No relevant chunks found for ticket ${ticketId}`);
+      
+      await supabaseClient
+        .from('ai_interactions')
+        .insert({
+          session_id: `suggestions_${ticketId}_${agentId}`,
+          interaction_type: 'response_suggestion',
+          input_text: ticketText,
+          ai_response: 'No suggestions available - insufficient context',
+          confidence_score: 0,
+          ticket_id: ticketId,
+          metadata: {
+            agent_id: agentId,
+            templates_found: 0,
+            knowledge_entries_found: 0,
+            insufficient_context: true
+          }
+        });
 
-Ticket Details:
+      return new Response(
+        JSON.stringify({
+          suggestions: [],
+          sources: {
+            templates: [],
+            knowledge: []
+          },
+          message: "No relevant information found to generate suggestions for this ticket."
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Restrictive system prompt for suggestions
+    const suggestionPrompt = `You are an information retrieval assistant. Your primary role is to generate response suggestions strictly and exclusively using the information provided in the given context chunks. Your instructions are as follows:
+
+Respond only and exclusively using the information contained in the provided chunks. Do not introduce any information that is not present in the chunks.
+
+If the provided chunks do not contain sufficient information to generate appropriate response suggestions, or if the chunks do not directly address the ticket's issues, respond with a JSON object containing an empty suggestions array and indicate insufficient information.
+
+Do not explain your suggestions or provide any additional commentary. Your suggestions should be concise and focused on addressing the ticket using only the provided information.
+
+Adhere to the context and limitations at all times. If any part of the ticket cannot be addressed with the provided chunks, you must refrain from speculation or the use of external knowledge.
+
+If there are multiple chunks provided, integrate the information cohesively, but do not infer or create connections beyond what is explicitly stated in the chunks.
+
+If no chunks are provided or if they are insufficient, immediately return empty suggestions.
+
+Final Reminder: Your response suggestions must be anchored solely in the content of the provided chunks. Any deviation from this rule should result in empty suggestions.
+
+Ticket Information:
 Title: ${ticket.title}
 Description: ${ticket.description}
 Status: ${ticket.status}
@@ -116,40 +174,24 @@ Priority: ${ticket.priority}
 Conversation History:
 ${conversationHistory}
 
-Available Templates:
-${templateContext}
+Context Chunks:
+${contextChunks}
 
-Knowledge Base Context:
-${knowledgeContext}
-
-Generate 3 response suggestions that are:
-1. Professional and empathetic
-2. Address the customer's specific issue
-3. Provide actionable solutions
-4. Vary in tone from formal to friendly
-
-Respond with JSON in this format:
+Generate up to 3 response suggestions that are based ONLY on the provided chunks. Respond with JSON in this exact format:
 {
   "suggestions": [
     {
-      "title": "Solution-focused Response",
-      "content": "Response text here...",
+      "title": "Solution from Available Information",
+      "content": "Response text based only on provided chunks...",
       "tone": "professional",
       "confidence": 0.85
-    },
-    {
-      "title": "Empathetic Response",
-      "content": "Response text here...",
-      "tone": "friendly",
-      "confidence": 0.80
-    },
-    {
-      "title": "Technical Response",
-      "content": "Response text here...",
-      "tone": "detailed",
-      "confidence": 0.75
     }
   ]
+}
+
+If the chunks do not contain adequate information for the ticket, respond with:
+{
+  "suggestions": []
 }`;
 
     const suggestionResponse = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -161,10 +203,10 @@ Respond with JSON in this format:
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'You are an expert customer support AI. Always respond with valid JSON only.' },
+          { role: 'system', content: 'You are an expert customer support AI. Always respond with valid JSON only. Follow the restrictive guidelines exactly.' },
           { role: 'user', content: suggestionPrompt }
         ],
-        temperature: 0.7,
+        temperature: 0.1, // Lower temperature for consistency
         max_tokens: 800,
       }),
     });
@@ -180,12 +222,13 @@ Respond with JSON in this format:
         interaction_type: 'response_suggestion',
         input_text: ticketText,
         ai_response: JSON.stringify(suggestions),
-        confidence_score: suggestions.suggestions[0]?.confidence || 0.7,
+        confidence_score: suggestions.suggestions?.[0]?.confidence || 0,
         ticket_id: ticketId,
         metadata: {
           agent_id: agentId,
           templates_found: templates?.length || 0,
-          knowledge_entries_found: knowledgeEntries?.length || 0
+          knowledge_entries_found: knowledgeEntries?.length || 0,
+          chunks_provided: chunkCount
         }
       });
 
@@ -199,11 +242,11 @@ Respond with JSON in this format:
       }
     }
 
-    console.log(`Generated ${suggestions.suggestions.length} response suggestions for ticket ${ticketId}`);
+    console.log(`Generated ${suggestions.suggestions?.length || 0} response suggestions for ticket ${ticketId}`);
 
     return new Response(
       JSON.stringify({
-        suggestions: suggestions.suggestions,
+        suggestions: suggestions.suggestions || [],
         sources: {
           templates: templates || [],
           knowledge: knowledgeEntries || []

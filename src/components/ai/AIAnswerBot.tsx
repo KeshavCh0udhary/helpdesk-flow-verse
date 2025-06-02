@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, MessageCircle, ThumbsUp, ThumbsDown, ExternalLink } from 'lucide-react';
+import { Loader2, MessageCircle, ThumbsUp, ThumbsDown, AlertCircle, CheckCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -18,6 +18,7 @@ interface AIResponse {
     similarity: number;
   }>;
   sessionId: string;
+  usedFallback?: boolean;
 }
 
 export const AIAnswerBot = () => {
@@ -74,6 +75,12 @@ export const AIAnswerBot = () => {
     return 'bg-red-100 text-red-800';
   };
 
+  const resetChat = () => {
+    setResponse(null);
+    setFeedback(null);
+    setQuestion('');
+  };
+
   return (
     <Card className="w-full max-w-2xl mx-auto">
       <CardHeader>
@@ -82,7 +89,7 @@ export const AIAnswerBot = () => {
           AI Answer Bot
         </CardTitle>
         <CardDescription>
-          Ask a question and get instant answers from our knowledge base
+          Ask a question and get answers based strictly on our knowledge base
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -102,23 +109,46 @@ export const AIAnswerBot = () => {
         {response && (
           <div className="space-y-4">
             <div className="flex items-center gap-2">
-              <Badge className={getConfidenceColor(response.confidence)}>
-                {Math.round(response.confidence * 100)}% confidence
-              </Badge>
+              {response.usedFallback ? (
+                <Badge className="bg-orange-100 text-orange-800 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  Insufficient Information
+                </Badge>
+              ) : (
+                <>
+                  <Badge className={getConfidenceColor(response.confidence)} >
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    {Math.round(response.confidence * 100)}% confidence
+                  </Badge>
+                  <Badge variant="outline">
+                    Based on {response.sources.length} source{response.sources.length !== 1 ? 's' : ''}
+                  </Badge>
+                </>
+              )}
             </div>
 
-            <div className="bg-gray-50 p-4 rounded-lg">
+            <div className={`p-4 rounded-lg ${response.usedFallback ? 'bg-orange-50 border border-orange-200' : 'bg-gray-50'}`}>
               <p className="text-gray-900">{response.answer}</p>
+              {response.usedFallback && (
+                <p className="text-sm text-orange-700 mt-2">
+                  This response indicates that the available information was insufficient to answer your question.
+                </p>
+              )}
             </div>
 
-            {response.sources.length > 0 && (
+            {response.sources.length > 0 && !response.usedFallback && (
               <div>
-                <h4 className="font-medium text-sm text-gray-700 mb-2">Sources:</h4>
+                <h4 className="font-medium text-sm text-gray-700 mb-2">Information Sources:</h4>
                 <div className="space-y-1">
                   {response.sources.map((source) => (
-                    <div key={source.id} className="flex items-center justify-between text-sm">
-                      <span className="text-blue-600">{source.title}</span>
-                      <Badge variant="outline">{source.category}</Badge>
+                    <div key={source.id} className="flex items-center justify-between text-sm bg-white p-2 rounded border">
+                      <span className="text-blue-600 font-medium">{source.title}</span>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline">{source.category}</Badge>
+                        <Badge variant="secondary" className="text-xs">
+                          {Math.round(source.similarity * 100)}% match
+                        </Badge>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -146,8 +176,13 @@ export const AIAnswerBot = () => {
             )}
 
             {feedback !== null && (
-              <div className="text-sm text-gray-600 pt-2 border-t">
-                Thank you for your feedback!
+              <div className="flex items-center justify-between pt-2 border-t">
+                <span className="text-sm text-gray-600">
+                  Thank you for your feedback!
+                </span>
+                <Button variant="outline" size="sm" onClick={resetChat}>
+                  Ask Another Question
+                </Button>
               </div>
             )}
           </div>

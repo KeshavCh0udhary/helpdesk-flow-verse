@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Lightbulb, Copy, Check } from 'lucide-react';
+import { Loader2, Lightbulb, Copy, Check, AlertCircle, Database } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -24,6 +24,8 @@ export const ResponseSuggestions = ({ ticketId, onSelectResponse }: ResponseSugg
   const [suggestions, setSuggestions] = useState<ResponseSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [noSuggestions, setNoSuggestions] = useState(false);
+  const [noSuggestionsMessage, setNoSuggestionsMessage] = useState('');
 
   useEffect(() => {
     if (ticketId && user) {
@@ -33,6 +35,9 @@ export const ResponseSuggestions = ({ ticketId, onSelectResponse }: ResponseSugg
 
   const fetchSuggestions = async () => {
     setLoading(true);
+    setNoSuggestions(false);
+    setNoSuggestionsMessage('');
+    
     try {
       const { data, error } = await supabase.functions.invoke('ai-response-suggestions', {
         body: {
@@ -43,9 +48,19 @@ export const ResponseSuggestions = ({ ticketId, onSelectResponse }: ResponseSugg
 
       if (error) throw error;
 
-      setSuggestions(data.suggestions || []);
+      if (data.suggestions && data.suggestions.length > 0) {
+        setSuggestions(data.suggestions);
+        setNoSuggestions(false);
+      } else {
+        setSuggestions([]);
+        setNoSuggestions(true);
+        setNoSuggestionsMessage(data.message || 'No relevant information found to generate suggestions for this ticket.');
+      }
     } catch (error) {
       console.error('Error fetching response suggestions:', error);
+      setSuggestions([]);
+      setNoSuggestions(true);
+      setNoSuggestionsMessage('Unable to generate suggestions at this time.');
     } finally {
       setLoading(false);
     }
@@ -88,7 +103,7 @@ export const ResponseSuggestions = ({ ticketId, onSelectResponse }: ResponseSugg
         <CardContent>
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin" />
-            <span className="ml-2">Generating suggestions...</span>
+            <span className="ml-2">Analyzing ticket and generating suggestions...</span>
           </div>
         </CardContent>
       </Card>
@@ -103,61 +118,82 @@ export const ResponseSuggestions = ({ ticketId, onSelectResponse }: ResponseSugg
           AI Response Suggestions
         </CardTitle>
         <CardDescription>
-          AI-generated response suggestions based on the ticket content and knowledge base
+          AI-generated response suggestions based strictly on available knowledge base and templates
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        {suggestions.length === 0 ? (
-          <div className="text-center py-4 text-gray-500">
-            No suggestions available for this ticket
+        {noSuggestions ? (
+          <div className="text-center py-8 space-y-4">
+            <div className="flex items-center justify-center">
+              <AlertCircle className="h-12 w-12 text-orange-400" />
+            </div>
+            <div>
+              <h3 className="font-medium text-gray-900 mb-2">No Suggestions Available</h3>
+              <p className="text-sm text-gray-600 max-w-md mx-auto">
+                {noSuggestionsMessage}
+              </p>
+            </div>
+            <div className="flex items-center gap-2 justify-center text-xs text-gray-500">
+              <Database className="h-4 w-4" />
+              <span>Suggestions are generated only from verified knowledge base content</span>
+            </div>
+            <Button variant="outline" onClick={fetchSuggestions} className="mt-4">
+              Retry Analysis
+            </Button>
           </div>
         ) : (
-          suggestions.map((suggestion, index) => (
-            <div key={index} className="border rounded-lg p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="font-medium">{suggestion.title}</h4>
+          <>
+            {suggestions.map((suggestion, index) => (
+              <div key={index} className="border rounded-lg p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-medium">{suggestion.title}</h4>
+                  <div className="flex gap-2">
+                    <Badge className={getToneColor(suggestion.tone)}>
+                      {suggestion.tone}
+                    </Badge>
+                    <Badge className={getConfidenceColor(suggestion.confidence)}>
+                      {Math.round(suggestion.confidence * 100)}%
+                    </Badge>
+                  </div>
+                </div>
+                
+                <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded">
+                  {suggestion.content}
+                </p>
+                
                 <div className="flex gap-2">
-                  <Badge className={getToneColor(suggestion.tone)}>
-                    {suggestion.tone}
-                  </Badge>
-                  <Badge className={getConfidenceColor(suggestion.confidence)}>
-                    {Math.round(suggestion.confidence * 100)}%
-                  </Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyToClipboard(suggestion.content, index)}
+                  >
+                    {copiedIndex === index ? (
+                      <Check className="h-4 w-4" />
+                    ) : (
+                      <Copy className="h-4 w-4" />
+                    )}
+                    {copiedIndex === index ? 'Copied!' : 'Copy'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => onSelectResponse(suggestion.content)}
+                  >
+                    Use This Response
+                  </Button>
                 </div>
               </div>
-              
-              <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded">
-                {suggestion.content}
-              </p>
-              
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => copyToClipboard(suggestion.content, index)}
-                >
-                  {copiedIndex === index ? (
-                    <Check className="h-4 w-4" />
-                  ) : (
-                    <Copy className="h-4 w-4" />
-                  )}
-                  {copiedIndex === index ? 'Copied!' : 'Copy'}
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => onSelectResponse(suggestion.content)}
-                >
-                  Use This Response
-                </Button>
+            ))}
+            
+            <div className="flex items-center justify-between pt-4 border-t">
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <Database className="h-4 w-4" />
+                <span>All suggestions are based on verified knowledge base content</span>
               </div>
+              <Button variant="outline" onClick={fetchSuggestions}>
+                Regenerate Suggestions
+              </Button>
             </div>
-          ))
-        )}
-        
-        {suggestions.length > 0 && (
-          <Button variant="outline" onClick={fetchSuggestions} className="w-full">
-            Generate New Suggestions
-          </Button>
+          </>
         )}
       </CardContent>
     </Card>
