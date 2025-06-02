@@ -64,25 +64,25 @@ serve(async (req) => {
     const embeddingData = await embeddingResponse.json();
     const queryEmbedding = embeddingData.data[0].embedding;
 
-    // Search for relevant response templates with higher threshold
+    // Search for relevant response templates with lower threshold
     const { data: templates, error: templateError } = await supabaseClient
       .rpc('similarity_search_response_templates', {
         query_embedding: queryEmbedding,
         dept_id: ticket.department_id,
-        match_threshold: 0.75, // Increased threshold
-        match_count: 3
+        match_threshold: 0.4, // Lowered threshold
+        match_count: 5
       });
 
     if (templateError) {
       console.error('Template search error:', templateError);
     }
 
-    // Search knowledge base for context with higher threshold
+    // Search knowledge base for context with lower threshold
     const { data: knowledgeEntries, error: kbError } = await supabaseClient
       .rpc('similarity_search_knowledge_base', {
         query_embedding: queryEmbedding,
-        match_threshold: 0.8, // Increased threshold
-        match_count: 3
+        match_threshold: 0.4, // Lowered threshold
+        match_count: 5
       });
 
     if (kbError) {
@@ -96,14 +96,14 @@ serve(async (req) => {
     if (templates && templates.length > 0) {
       templates.forEach((template, index) => {
         chunkCount++;
-        contextChunks += `Chunk ${chunkCount}:\nType: Response Template\nName: ${template.name}\nContent: ${template.content}\nCategory: ${template.category}\n\n`;
+        contextChunks += `Chunk ${chunkCount}:\nType: Response Template\nName: ${template.name}\nContent: ${template.content}\nCategory: ${template.category}\nRelevance: ${Math.round(template.similarity * 100)}%\n\n`;
       });
     }
 
     if (knowledgeEntries && knowledgeEntries.length > 0) {
       knowledgeEntries.forEach((entry, index) => {
         chunkCount++;
-        contextChunks += `Chunk ${chunkCount}:\nType: Knowledge Base\nTitle: ${entry.title}\nContent: ${entry.content}\nCategory: ${entry.category}\n\n`;
+        contextChunks += `Chunk ${chunkCount}:\nType: Knowledge Base\nTitle: ${entry.title}\nContent: ${entry.content}\nCategory: ${entry.category}\nRelevance: ${Math.round(entry.similarity * 100)}%\n\n`;
       });
     }
 
@@ -114,56 +114,18 @@ serve(async (req) => {
           .join('\n')
       : 'No previous comments.';
 
-    // If no relevant chunks found, return empty suggestions
-    if (!contextChunks.trim()) {
-      console.log(`No relevant chunks found for ticket ${ticketId}`);
-      
-      await supabaseClient
-        .from('ai_interactions')
-        .insert({
-          session_id: `suggestions_${ticketId}_${agentId}`,
-          interaction_type: 'response_suggestion',
-          input_text: ticketText,
-          ai_response: 'No suggestions available - insufficient context',
-          confidence_score: 0,
-          ticket_id: ticketId,
-          metadata: {
-            agent_id: agentId,
-            templates_found: 0,
-            knowledge_entries_found: 0,
-            insufficient_context: true
-          }
-        });
+    console.log(`Found ${chunkCount} context chunks for ticket ${ticketId}`);
 
-      return new Response(
-        JSON.stringify({
-          suggestions: [],
-          sources: {
-            templates: [],
-            knowledge: []
-          },
-          message: "No relevant information found to generate suggestions for this ticket."
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // Updated system prompt - more helpful and flexible
+    const suggestionPrompt = `You are a helpful customer support assistant that generates response suggestions for tickets. Your goal is to provide useful, actionable suggestions that help support agents respond effectively.
 
-    // Restrictive system prompt for suggestions
-    const suggestionPrompt = `You are an information retrieval assistant. Your primary role is to generate response suggestions strictly and exclusively using the information provided in the given context chunks. Your instructions are as follows:
-
-Respond only and exclusively using the information contained in the provided chunks. Do not introduce any information that is not present in the chunks.
-
-If the provided chunks do not contain sufficient information to generate appropriate response suggestions, or if the chunks do not directly address the ticket's issues, respond with a JSON object containing an empty suggestions array and indicate insufficient information.
-
-Do not explain your suggestions or provide any additional commentary. Your suggestions should be concise and focused on addressing the ticket using only the provided information.
-
-Adhere to the context and limitations at all times. If any part of the ticket cannot be addressed with the provided chunks, you must refrain from speculation or the use of external knowledge.
-
-If there are multiple chunks provided, integrate the information cohesively, but do not infer or create connections beyond what is explicitly stated in the chunks.
-
-If no chunks are provided or if they are insufficient, immediately return empty suggestions.
-
-Final Reminder: Your response suggestions must be anchored solely in the content of the provided chunks. Any deviation from this rule should result in empty suggestions.
+INSTRUCTIONS:
+1. Generate 2-3 practical response suggestions based on the ticket content and any available context
+2. If relevant context is provided, prioritize it but don't be limited by it
+3. Create suggestions with different tones (professional, friendly, detailed) when appropriate
+4. If limited context is available, still provide helpful general guidance based on the ticket type
+5. Each suggestion should be actionable and ready to use
+6. Focus on being helpful rather than restrictive
 
 Ticket Information:
 Title: ${ticket.title}
@@ -174,25 +136,27 @@ Priority: ${ticket.priority}
 Conversation History:
 ${conversationHistory}
 
-Context Chunks:
-${contextChunks}
+${contextChunks ? `Available Context Information:\n${contextChunks}` : 'No specific context available - generate helpful general suggestions.'}
 
-Generate up to 3 response suggestions that are based ONLY on the provided chunks. Respond with JSON in this exact format:
+Generate 2-3 response suggestions in this exact JSON format:
 {
   "suggestions": [
     {
-      "title": "Solution from Available Information",
-      "content": "Response text based only on provided chunks...",
-      "tone": "professional",
+      "title": "Professional Response",
+      "content": "Thank you for contacting us regarding [issue]. [Provide helpful response based on available information or general best practices]",
+      "tone": "professional", 
       "confidence": 0.85
+    },
+    {
+      "title": "Friendly Approach",
+      "content": "Hi! I'd be happy to help you with [issue]. [Provide helpful response]",
+      "tone": "friendly",
+      "confidence": 0.80
     }
   ]
 }
 
-If the chunks do not contain adequate information for the ticket, respond with:
-{
-  "suggestions": []
-}`;
+Remember: Always aim to be helpful. If specific context is limited, provide general guidance that would be appropriate for this type of issue.`;
 
     const suggestionResponse = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -203,11 +167,11 @@ If the chunks do not contain adequate information for the ticket, respond with:
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: [
-          { role: 'system', content: 'You are an expert customer support AI. Always respond with valid JSON only. Follow the restrictive guidelines exactly.' },
+          { role: 'system', content: 'You are a helpful customer support AI. Always respond with valid JSON only. Be helpful and provide useful suggestions even when context is limited.' },
           { role: 'user', content: suggestionPrompt }
         ],
-        temperature: 0.1, // Lower temperature for consistency
-        max_tokens: 800,
+        temperature: 0.3, // Balanced temperature for helpful but consistent responses
+        max_tokens: 1000,
       }),
     });
 
@@ -228,7 +192,8 @@ If the chunks do not contain adequate information for the ticket, respond with:
           agent_id: agentId,
           templates_found: templates?.length || 0,
           knowledge_entries_found: knowledgeEntries?.length || 0,
-          chunks_provided: chunkCount
+          chunks_provided: chunkCount,
+          improved_system: true
         }
       });
 
