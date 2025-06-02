@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { MessageCircle, Send, Paperclip, X } from 'lucide-react';
+import { MessageCircle, Send, Paperclip, X, Users } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { AdvancedFileUpload } from './AdvancedFileUpload';
 import { CommentsList } from './comments/CommentsList';
@@ -200,50 +200,80 @@ export const EnhancedComments = ({ ticketId, disableNewComments = false }: Enhan
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-      </div>
+      <Card className="border border-gray-200">
+        <CardContent className="flex items-center justify-center p-8">
+          <div className="text-center space-y-2">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <p className="text-sm text-gray-600">Loading conversation...</p>
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Comments List */}
-      <div className="min-h-[400px]">
-        {comments.length === 0 ? (
-          <div className="text-center py-8">
-            <MessageCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No comments yet</h3>
-            <p className="text-gray-600">
-              {disableNewComments ? "This ticket has no comments." : "Be the first to add a comment"}
+    <Card className="border border-gray-200 shadow-sm">
+      <CardHeader className="border-b border-gray-100 bg-gray-50/50">
+        <CardTitle className="flex items-center gap-3">
+          <div className="p-2 bg-blue-50 rounded-lg">
+            <MessageCircle className="h-5 w-5 text-blue-600" />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900">Conversation</h3>
+            <p className="text-sm text-gray-600 font-normal">
+              {comments.length > 0 ? (
+                <span className="flex items-center gap-1">
+                  <Users className="h-3 w-3" />
+                  {comments.length} message{comments.length !== 1 ? 's' : ''}
+                </span>
+              ) : (
+                'No messages yet'
+              )}
             </p>
           </div>
-        ) : (
-          <>
-            <CommentsList 
-              comments={transformedComments}
-              formatFileSize={formatFileSize}
-              getRoleColor={getRoleBadgeColor}
-              currentUserId={user?.id}
-            />
-            <div ref={messagesEndRef} />
-          </>
-        )}
-      </div>
+        </CardTitle>
+      </CardHeader>
+      
+      <CardContent className="p-0">
+        {/* Comments List */}
+        <div className="min-h-[400px] max-h-[600px] overflow-y-auto">
+          {comments.length === 0 ? (
+            <div className="flex items-center justify-center h-full py-16">
+              <div className="text-center space-y-3">
+                <div className="p-4 bg-gray-50 rounded-full w-fit mx-auto">
+                  <MessageCircle className="h-8 w-8 text-gray-400" />
+                </div>
+                <div>
+                  <h3 className="font-medium text-gray-900 mb-1">No conversation yet</h3>
+                  <p className="text-sm text-gray-600">
+                    {disableNewComments ? "This ticket has no comments." : "Start the conversation by adding the first comment"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="p-4">
+              <CommentsList 
+                comments={transformedComments}
+                formatFileSize={formatFileSize}
+                getRoleColor={getRoleBadgeColor}
+                currentUserId={user?.id}
+              />
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+        </div>
 
-      {/* Comment Form */}
-      {!disableNewComments && user && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Add Comment</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmitComment} className="space-y-4">
+        {/* Comment Form */}
+        {!disableNewComments && user && (
+          <div className="border-t border-gray-100 bg-gray-50/30 p-4">
+            <form onSubmit={handleSubmitComment} className="space-y-3">
               <Textarea
                 value={newComment}
                 onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Write your comment..."
+                placeholder="Type your message..."
                 rows={3}
+                className="resize-none border-gray-200 focus:border-blue-300 focus:ring-blue-200"
                 required
               />
               
@@ -253,25 +283,30 @@ export const EnhancedComments = ({ ticketId, disableNewComments = false }: Enhan
                   variant="outline"
                   size="sm"
                   onClick={() => setShowFileUpload(!showFileUpload)}
+                  className="bg-white hover:bg-gray-50"
                 >
                   <Paperclip className="h-4 w-4 mr-2" />
                   Attach Files
                 </Button>
                 
-                <Button type="submit" disabled={submitting || !newComment.trim()}>
+                <Button 
+                  type="submit" 
+                  disabled={submitting || !newComment.trim()}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
                   {submitting ? (
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                   ) : (
                     <Send className="h-4 w-4 mr-2" />
                   )}
-                  Post Comment
+                  {submitting ? 'Sending...' : 'Send Message'}
                 </Button>
               </div>
               
               {showFileUpload && (
-                <div className="border-t pt-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-sm font-medium">Attach Files</h4>
+                <div className="border-t pt-3 mt-3">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-medium text-gray-700">Attach Files</h4>
                     <Button
                       type="button"
                       variant="ghost"
@@ -290,9 +325,9 @@ export const EnhancedComments = ({ ticketId, disableNewComments = false }: Enhan
                 </div>
               )}
             </form>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 };

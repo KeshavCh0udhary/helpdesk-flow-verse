@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Lightbulb, Copy, Check, AlertCircle, Database } from 'lucide-react';
+import { Loader2, Lightbulb, Copy, Check, AlertCircle, Database, RefreshCw, Sparkles } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -78,124 +78,158 @@ export const ResponseSuggestions = ({ ticketId, onSelectResponse }: ResponseSugg
 
   const getToneColor = (tone: string) => {
     switch (tone.toLowerCase()) {
-      case 'professional': return 'bg-blue-100 text-blue-800';
-      case 'friendly': return 'bg-green-100 text-green-800';
-      case 'detailed': return 'bg-purple-100 text-purple-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'professional': return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'friendly': return 'bg-green-50 text-green-700 border-green-200';
+      case 'detailed': return 'bg-purple-50 text-purple-700 border-purple-200';
+      default: return 'bg-gray-50 text-gray-700 border-gray-200';
     }
   };
 
   const getConfidenceColor = (confidence: number) => {
-    if (confidence >= 0.8) return 'bg-green-100 text-green-800';
-    if (confidence >= 0.6) return 'bg-yellow-100 text-yellow-800';
-    return 'bg-red-100 text-red-800';
+    if (confidence >= 0.8) return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (confidence >= 0.6) return 'bg-amber-50 text-amber-700 border-amber-200';
+    return 'bg-red-50 text-red-700 border-red-200';
   };
 
   if (loading) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Lightbulb className="h-5 w-5" />
-            AI Response Suggestions
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin" />
-            <span className="ml-2">Analyzing ticket and generating suggestions...</span>
+      <div className="space-y-4">
+        <div className="flex items-center justify-center py-12 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-100">
+          <div className="text-center space-y-3">
+            <div className="flex justify-center">
+              <div className="p-3 bg-white rounded-full shadow-sm">
+                <Loader2 className="h-6 w-6 animate-spin text-blue-600" />
+              </div>
+            </div>
+            <div>
+              <h3 className="font-medium text-gray-900">Analyzing Ticket</h3>
+              <p className="text-sm text-gray-600 mt-1">Generating intelligent response suggestions...</p>
+            </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Lightbulb className="h-5 w-5" />
-          AI Response Suggestions
-        </CardTitle>
-        <CardDescription>
-          AI-generated response suggestions based strictly on available knowledge base and templates
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {noSuggestions ? (
-          <div className="text-center py-8 space-y-4">
-            <div className="flex items-center justify-center">
-              <AlertCircle className="h-12 w-12 text-orange-400" />
+    <div className="space-y-4">
+      {noSuggestions ? (
+        <div className="text-center py-12 bg-gradient-to-br from-orange-50 to-amber-50 rounded-lg border border-orange-100">
+          <div className="space-y-4">
+            <div className="flex justify-center">
+              <div className="p-3 bg-white rounded-full shadow-sm">
+                <AlertCircle className="h-8 w-8 text-orange-500" />
+              </div>
             </div>
-            <div>
-              <h3 className="font-medium text-gray-900 mb-2">No Suggestions Available</h3>
-              <p className="text-sm text-gray-600 max-w-md mx-auto">
+            <div className="space-y-2">
+              <h3 className="font-semibold text-gray-900">No Suggestions Available</h3>
+              <p className="text-sm text-gray-600 max-w-sm mx-auto leading-relaxed">
                 {noSuggestionsMessage}
               </p>
             </div>
-            <div className="flex items-center gap-2 justify-center text-xs text-gray-500">
-              <Database className="h-4 w-4" />
-              <span>Suggestions are generated only from verified knowledge base content</span>
+            <div className="flex items-center gap-2 justify-center text-xs text-gray-500 bg-white px-3 py-2 rounded-full inline-flex">
+              <Database className="h-3 w-3" />
+              <span>Based on verified knowledge base content</span>
             </div>
-            <Button variant="outline" onClick={fetchSuggestions} className="mt-4">
+            <Button 
+              variant="outline" 
+              onClick={fetchSuggestions} 
+              className="mt-4 bg-white hover:bg-gray-50"
+              size="sm"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
               Retry Analysis
             </Button>
           </div>
-        ) : (
-          <>
-            {suggestions.map((suggestion, index) => (
-              <div key={index} className="border rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium">{suggestion.title}</h4>
-                  <div className="flex gap-2">
-                    <Badge className={getToneColor(suggestion.tone)}>
-                      {suggestion.tone}
-                    </Badge>
-                    <Badge className={getConfidenceColor(suggestion.confidence)}>
-                      {Math.round(suggestion.confidence * 100)}%
-                    </Badge>
-                  </div>
-                </div>
-                
-                <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded">
-                  {suggestion.content}
-                </p>
-                
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => copyToClipboard(suggestion.content, index)}
-                  >
-                    {copiedIndex === index ? (
-                      <Check className="h-4 w-4" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                    {copiedIndex === index ? 'Copied!' : 'Copy'}
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => onSelectResponse(suggestion.content)}
-                  >
-                    Use This Response
-                  </Button>
-                </div>
-              </div>
-            ))}
-            
-            <div className="flex items-center justify-between pt-4 border-t">
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <Database className="h-4 w-4" />
-                <span>All suggestions are based on verified knowledge base content</span>
-              </div>
-              <Button variant="outline" onClick={fetchSuggestions}>
-                Regenerate Suggestions
-              </Button>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-blue-600" />
+              <span className="text-sm font-medium text-gray-700">
+                {suggestions.length} suggestion{suggestions.length !== 1 ? 's' : ''} generated
+              </span>
             </div>
-          </>
-        )}
-      </CardContent>
-    </Card>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={fetchSuggestions}
+              className="text-xs hover:bg-blue-50"
+            >
+              <RefreshCw className="h-3 w-3 mr-1" />
+              Refresh
+            </Button>
+          </div>
+
+          <div className="space-y-3">
+            {suggestions.map((suggestion, index) => (
+              <Card key={index} className="border border-gray-200 hover:border-blue-200 transition-colors shadow-sm">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <CardTitle className="text-sm font-medium text-gray-900 leading-snug">
+                      {suggestion.title}
+                    </CardTitle>
+                    <div className="flex gap-1.5 ml-3">
+                      <Badge 
+                        variant="outline" 
+                        className={`text-xs ${getToneColor(suggestion.tone)}`}
+                      >
+                        {suggestion.tone}
+                      </Badge>
+                      <Badge 
+                        variant="outline" 
+                        className={`text-xs ${getConfidenceColor(suggestion.confidence)}`}
+                      >
+                        {Math.round(suggestion.confidence * 100)}%
+                      </Badge>
+                    </div>
+                  </div>
+                </CardHeader>
+                
+                <CardContent className="pt-0 space-y-4">
+                  <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                    <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap">
+                      {suggestion.content}
+                    </p>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => copyToClipboard(suggestion.content, index)}
+                      className="flex-1 bg-white hover:bg-gray-50"
+                    >
+                      {copiedIndex === index ? (
+                        <Check className="h-4 w-4 mr-2 text-green-600" />
+                      ) : (
+                        <Copy className="h-4 w-4 mr-2" />
+                      )}
+                      {copiedIndex === index ? 'Copied!' : 'Copy'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => onSelectResponse(suggestion.content)}
+                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      <MessageSquare className="h-4 w-4 mr-2" />
+                      Use Response
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          
+          <div className="flex items-center justify-center pt-3 border-t border-gray-100">
+            <div className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 px-3 py-2 rounded-full">
+              <Database className="h-3 w-3" />
+              <span>Powered by verified knowledge base</span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };
