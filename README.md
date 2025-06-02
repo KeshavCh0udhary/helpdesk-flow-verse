@@ -2,6 +2,12 @@
 
 An AI-powered, enterprise-grade helpdesk system built with React, TypeScript, and Supabase. This comprehensive platform provides intelligent ticket management, automated response suggestions, and advanced analytics for modern support teams.
 
+## 🔗 Links
+
+- **GitHub Repository**: [https://github.com/KeshavCh0udhary/helpdesk-flow-verse](https://github.com/KeshavCh0udhary/helpdesk-flow-verse)
+- **Live Demo**: [https://helpdesk-flow-verse.vercel.app](https://helpdesk-flow-verse.vercel.app)
+- **Documentation**: This README
+
 ## ✨ Features
 
 ### 🤖 AI-Powered Capabilities
@@ -66,7 +72,7 @@ An AI-powered, enterprise-grade helpdesk system built with React, TypeScript, an
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/KeshavCh0udhary/helpdesk-flow-verse.git
    cd helpdesk-flow-verse
    ```
 
