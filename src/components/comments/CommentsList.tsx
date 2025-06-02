@@ -13,6 +13,7 @@ interface Comment {
   content: string;
   created_at: string;
   user: {
+    id: string;
     full_name: string;
     role: string;
   };
@@ -28,7 +29,7 @@ interface CommentsListProps {
 
 export const CommentsList = ({ comments, formatFileSize, getRoleColor, currentUserId }: CommentsListProps) => {
   return (
-    <div className="space-y-2 max-h-96 overflow-y-auto p-2 bg-gray-50 rounded-lg">
+    <div className="space-y-1 max-h-96 overflow-y-auto p-3 bg-gray-50 rounded-lg">
       {comments.map((comment) => (
         <CommentItem
           key={comment.id}
