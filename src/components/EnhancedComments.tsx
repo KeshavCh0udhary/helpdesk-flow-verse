@@ -154,8 +154,6 @@ export const EnhancedComments = ({ ticketId, disableNewComments = false }: Enhan
   };
 
   const handleFileUpload = async (files: Array<{ id: string; file_name: string; size_bytes: number; storage_path: string }>) => {
-    // File upload logic would go here
-    // This is a placeholder for the file upload functionality
     console.log('Files uploaded:', files);
     setShowFileUpload(false);
     toast({
