@@ -13,6 +13,7 @@ import { Database } from '@/integrations/supabase/types';
 import { EnhancedComments } from '@/components/EnhancedComments';
 import { ResponseSuggestions } from '@/components/ai/ResponseSuggestions';
 import { AIAnswerBot } from '@/components/ai/AIAnswerBot';
+import { getPriorityColorClasses, getStatusColorClasses } from '@/utils/colorUtils';
 
 type TicketStatus = Database['public']['Enums']['ticket_status'];
 type TicketPriority = Database['public']['Enums']['ticket_priority'];
@@ -176,26 +177,6 @@ export default function TicketDetails() {
     return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
   };
 
-  const getPriorityColor = (priority: TicketPriority) => {
-    switch (priority) {
-      case 'urgent': return 'destructive';
-      case 'high': return 'secondary';
-      case 'medium': return 'outline';
-      case 'low': return 'default';
-      default: return 'default';
-    }
-  };
-
-  const getStatusColor = (status: TicketStatus) => {
-    switch (status) {
-      case 'open': return 'destructive';
-      case 'in_progress': return 'secondary';
-      case 'resolved': return 'default';
-      case 'closed': return 'outline';
-      default: return 'default';
-    }
-  };
-
   const handleResponseSelect = (content: string) => {
     // This will be handled by the EnhancedComments component
     const event = new CustomEvent('insertResponse', { detail: content });
@@ -245,10 +226,10 @@ export default function TicketDetails() {
           </div>
           
           <div className="flex gap-2">
-            <Badge variant={getStatusColor(ticket.status)}>
+            <Badge className={getStatusColorClasses(ticket.status)}>
               {ticket.status.replace('_', ' ')}
             </Badge>
-            <Badge variant={getPriorityColor(ticket.priority)}>
+            <Badge className={getPriorityColorClasses(ticket.priority)}>
               {ticket.priority}
             </Badge>
           </div>
@@ -350,7 +331,7 @@ export default function TicketDetails() {
               </div>
               <div>
                 <p className="text-sm text-gray-500">Priority</p>
-                <Badge variant={getPriorityColor(ticket.priority)}>
+                <Badge className={getPriorityColorClasses(ticket.priority)}>
                   {ticket.priority}
                 </Badge>
               </div>

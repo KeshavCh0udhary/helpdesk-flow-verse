@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
 import { Database } from '@/integrations/supabase/types';
+import { getPriorityColorClasses, getStatusColorClasses } from '@/utils/colorUtils';
 
 type TicketStatus = Database['public']['Enums']['ticket_status'];
 type TicketPriority = Database['public']['Enums']['ticket_priority'];
@@ -22,26 +23,6 @@ interface TicketItem {
 interface TicketCardProps {
   ticket: TicketItem;
 }
-
-const getPriorityColor = (priority: TicketPriority) => {
-  switch (priority) {
-    case 'urgent': return 'destructive';
-    case 'high': return 'secondary';
-    case 'medium': return 'outline';
-    case 'low': return 'default';
-    default: return 'default';
-  }
-};
-
-const getStatusColor = (status: TicketStatus) => {
-  switch (status) {
-    case 'open': return 'destructive';
-    case 'in_progress': return 'secondary';
-    case 'resolved': return 'default';
-    case 'closed': return 'outline';
-    default: return 'default';
-  }
-};
 
 export const TicketCard = ({ ticket }: TicketCardProps) => {
   return (
@@ -65,10 +46,10 @@ export const TicketCard = ({ ticket }: TicketCardProps) => {
             </CardDescription>
           </div>
           <div className="flex gap-2">
-            <Badge variant={getStatusColor(ticket.status)}>
+            <Badge className={getStatusColorClasses(ticket.status)}>
               {ticket.status.replace('_', ' ')}
             </Badge>
-            <Badge variant={getPriorityColor(ticket.priority)}>
+            <Badge className={getPriorityColorClasses(ticket.priority)}>
               {ticket.priority}
             </Badge>
           </div>

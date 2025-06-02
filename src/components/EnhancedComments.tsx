@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -117,7 +118,7 @@ export const EnhancedComments = ({ ticketId }: EnhancedCommentsProps) => {
         size_bytes: file.size,
         ticket_id: ticketId,
         comment_id: commentId,
-        uploaded_by: user?.id
+        uploaded_by_user_id: user?.id
       });
 
     if (attachmentError) throw attachmentError;
