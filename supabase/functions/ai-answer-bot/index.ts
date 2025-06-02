@@ -102,36 +102,31 @@ serve(async (req) => {
     const embeddingData = await embeddingResponse.json();
     const queryEmbedding = embeddingData.data[0].embedding;
 
-    // Search for relevant knowledge base entries with improved threshold
+    // Search for relevant knowledge base entries
     const { data: similarEntries, error: searchError } = await supabaseClient
       .rpc('similarity_search_knowledge_base', {
         query_embedding: queryEmbedding,
-        match_threshold: 0.6, // Lowered from 0.7 to 0.6 for better matching
-        match_count: 8 // Increased from 5 to 8 for more context
+        match_threshold: 0.5, // Lowered threshold for broader matching
+        match_count: 8
       });
 
     if (searchError) {
       console.error('Knowledge base search error:', searchError);
     }
 
-    // Enhanced debugging - log similarity scores with more detail
     console.log(`Found ${similarEntries?.length || 0} potential matches for question: "${question}"`);
     if (similarEntries && similarEntries.length > 0) {
       similarEntries.forEach((entry, index) => {
-        console.log(`Match ${index + 1}: Title="${entry.title}", Similarity=${entry.similarity}, Category=${entry.category}, Tags=${entry.tags || 'none'}`);
+        console.log(`Match ${index + 1}: Title="${entry.title}", Similarity=${entry.similarity}, Category=${entry.category}`);
       });
-    } else {
-      console.log('No matches found above threshold 0.6');
     }
 
     let contextChunksText = '';
     let knowledgeBaseIdForLogging = null;
-    const fallbackResponse = "I am unable to answer this question with the available information.";
 
     if (similarEntries && similarEntries.length > 0) {
-      // Filter for higher quality matches (above 0.65) if available
-      const highQualityMatches = similarEntries.filter(entry => entry.similarity > 0.65);
-      const matchesToUse = highQualityMatches.length > 0 ? highQualityMatches : similarEntries.slice(0, 5);
+      // Use top matches for context
+      const matchesToUse = similarEntries.slice(0, 5);
       
       contextChunksText = matchesToUse
         .map((entry, index) => `Knowledge Entry ${index + 1}:\nTitle: ${entry.title || 'N/A'}\nContent: ${entry.content}\nCategory: ${entry.category || 'N/A'}\nRelevance: ${Math.round(entry.similarity * 100)}%`)
@@ -144,62 +139,26 @@ serve(async (req) => {
     // Fetch conversation history
     const conversationHistory = await getFormattedConversationHistory(supabaseClient, sessionId);
 
-    // Only use fallback if we have no relevant matches above 0.6 threshold
-    if (!contextChunksText.trim()) {
-      console.log("No relevant knowledge base chunks found for the question. Using fallback.");
-      await supabaseClient
-        .from('ai_interactions')
-        .insert({
-          user_id: userId,
-          session_id: sessionId,
-          interaction_type: 'answer_bot',
-          input_text: question,
-          ai_response: fallbackResponse,
-          confidence_score: 0,
-          knowledge_base_id: null,
-          metadata: {
-            similar_entries_count: 0,
-            fallback_used: true,
-            history_length: conversationHistory.length,
-            threshold_used: 0.6
-          }
-        });
-
-      return new Response(
-        JSON.stringify({
-          answer: fallbackResponse,
-          confidence: 0,
-          sources: [],
-          sessionId,
-          usedFallback: true
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
     // Construct messages for OpenAI Chat API, including history
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
 
-    // Enhanced system prompt with better instructions for knowledge base usage
-    const systemPrompt = `You are a knowledgeable support assistant. Your primary role is to answer user questions using ONLY the information provided in the Knowledge Base entries below.
+    // Updated system prompt - more helpful and conversational
+    const systemPrompt = `You are a helpful and knowledgeable support assistant. Your goal is to provide the best possible assistance to users.
 
-CRITICAL INSTRUCTIONS:
-1. Base your answer EXCLUSIVELY on the Knowledge Base entries provided below
-2. If the Knowledge Base entries contain information that answers the user's question, provide a clear, helpful response
-3. DO NOT say you cannot answer if relevant information exists in the Knowledge Base
-4. Synthesize information from multiple entries if needed to provide a complete answer
-5. Be conversational and helpful, not robotic
-6. If the Knowledge Base truly lacks sufficient information to answer the question, then respond with: "${fallbackResponse}"
+INSTRUCTIONS:
+1. If relevant knowledge base information is provided below, use it as your primary source to answer questions
+2. Be conversational, helpful, and friendly in your responses
+3. If the knowledge base has relevant information, prioritize it but feel free to add helpful context or explanations
+4. If the knowledge base lacks information on a topic, you can provide general helpful information while noting that specific organizational details may not be available
+5. Always aim to be as helpful as possible to the user
+6. If you need to clarify something or ask follow-up questions, feel free to do so
 
 Previous Conversation History:
 ${conversationHistory.length > 0 ? conversationHistory.map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`).join('\n') : 'No previous conversation history.'}
 
-Knowledge Base Entries:
-${contextChunksText}
+${contextChunksText ? `Available Knowledge Base Information:\n${contextChunksText}` : 'No specific knowledge base information found for this query.'}
 
-User Question: ${question}
-
-Instructions: Answer the user's question based on the Knowledge Base entries above. Be helpful and conversational. Only use the fallback response if the Knowledge Base truly cannot help answer their question.`;
+Remember: Be helpful, conversational, and aim to assist the user in the best way possible. Use the knowledge base information when available, but don't let the lack of specific information prevent you from being helpful.`;
 
     messages.push({ role: 'system', content: systemPrompt });
     messages.push({ role: 'user', content: question });
@@ -214,8 +173,8 @@ Instructions: Answer the user's question based on the Knowledge Base entries abo
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: messages,
-        temperature: 0.2, // Lowered for more consistent responses
-        max_tokens: 400, // Increased for more detailed responses
+        temperature: 0.3,
+        max_tokens: 500,
       }),
     });
 
@@ -228,10 +187,7 @@ Instructions: Answer the user's question based on the Knowledge Base entries abo
     const chatData = await chatResponse.json();
     let aiResponse = chatData.choices[0].message.content.trim();
 
-    // Enhanced fallback detection - only trigger if response is exactly the fallback
-    const isFallbackResponse = aiResponse === fallbackResponse;
-    
-    console.log(`AI Response generated: ${isFallbackResponse ? 'FALLBACK' : 'KNOWLEDGE-BASED'}`);
+    console.log(`AI Response generated successfully`);
 
     // Store interaction and update usage
     const confidenceScore = (similarEntries && similarEntries.length > 0)
@@ -254,8 +210,7 @@ Instructions: Answer the user's question based on the Knowledge Base entries abo
           chunks_provided_count: similarEntries?.length || 0,
           history_length: conversationHistory.length,
           model_used: 'gpt-4o-mini',
-          threshold_used: 0.6,
-          fallback_used: isFallbackResponse
+          threshold_used: 0.5
         }
       });
 
@@ -263,8 +218,8 @@ Instructions: Answer the user's question based on the Knowledge Base entries abo
       console.error('Error storing interaction:', interactionError);
     }
 
-    // Update usage count for the top chunk if KB was actually used
-    if (knowledgeBaseIdForLogging && !isFallbackResponse) {
+    // Update usage count for the top chunk if KB was used
+    if (knowledgeBaseIdForLogging) {
       const { error: updateError } = await supabaseClient
         .rpc('increment_kb_usage_count', { row_id: knowledgeBaseIdForLogging });
       if (updateError) console.error("Error updating KB usage count:", updateError);
@@ -274,7 +229,7 @@ Instructions: Answer the user's question based on the Knowledge Base entries abo
       JSON.stringify({
         answer: aiResponse,
         confidence: confidenceScore,
-        sources: (!isFallbackResponse && similarEntries) 
+        sources: (similarEntries && similarEntries.length > 0) 
           ? similarEntries.slice(0, 3).map(e => ({
               id: e.id, 
               title: e.title, 
@@ -283,7 +238,7 @@ Instructions: Answer the user's question based on the Knowledge Base entries abo
             })) 
           : [],
         sessionId,
-        usedFallback: isFallbackResponse
+        usedFallback: false
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
