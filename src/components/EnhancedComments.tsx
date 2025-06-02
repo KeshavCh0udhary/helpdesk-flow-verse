@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -154,11 +153,15 @@ export const EnhancedComments = ({ ticketId, disableNewComments = false }: Enhan
     }
   };
 
-  const handleFileUpload = async (files: File[]) => {
+  const handleFileUpload = async (files: Array<{ id: string; file_name: string; size_bytes: number; storage_path: string }>) => {
     // File upload logic would go here
     // This is a placeholder for the file upload functionality
-    console.log('Files to upload:', files);
+    console.log('Files uploaded:', files);
     setShowFileUpload(false);
+    toast({
+      title: "Success",
+      description: `${files.length} file(s) uploaded successfully`,
+    });
   };
 
   const getRoleBadgeColor = (role: string) => {
@@ -285,9 +288,10 @@ export const EnhancedComments = ({ ticketId, disableNewComments = false }: Enhan
                     </Button>
                   </div>
                   <AdvancedFileUpload
-                    onFilesSelected={handleFileUpload}
+                    onFilesUploaded={handleFileUpload}
+                    ticketId={ticketId}
                     maxFiles={5}
-                    maxSizePerFile={10 * 1024 * 1024} // 10MB
+                    maxFileSize={10}
                   />
                 </div>
               )}
