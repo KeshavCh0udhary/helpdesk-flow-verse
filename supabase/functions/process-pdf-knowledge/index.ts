@@ -1,4 +1,3 @@
-
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -210,15 +209,15 @@ function extractTextFromStream(streamContent: string): string {
     while ((match = operator.exec(streamContent)) !== null) {
       let textContent = match[1];
       
-      // Handle escape sequences
+      // Handle escape sequences - FIXED REGEX PATTERNS
       textContent = textContent
         .replace(/\\n/g, '\n')
         .replace(/\\r/g, '\r')
         .replace(/\\t/g, '\t')
         .replace(/\\b/g, '\b')
         .replace(/\\f/g, '\f')
-        .replace(/\\(/g, '(')
-        .replace(/\\)/g, ')')
+        .replace(/\\\(/g, '(')
+        .replace(/\\\)/g, ')')
         .replace(/\\\\/g, '\\')
         .replace(/\\(\d{3})/g, (_, octal) => String.fromCharCode(parseInt(octal, 8)));
       
