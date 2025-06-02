@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
@@ -7,10 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ArrowLeft, Paperclip } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Database } from '@/integrations/supabase/types';
 import { EnhancedComments } from '@/components/EnhancedComments';
+import { ResponseSuggestions } from '@/components/ai/ResponseSuggestions';
+import { AIAnswerBot } from '@/components/ai/AIAnswerBot';
 
 type TicketStatus = Database['public']['Enums']['ticket_status'];
 type TicketPriority = Database['public']['Enums']['ticket_priority'];
@@ -105,7 +107,7 @@ export default function TicketDetails() {
         .from('attachments')
         .select('id, file_name, size_bytes, created_at, storage_path')
         .eq('ticket_id', id)
-        .is('comment_id', null); // Only get ticket attachments, not comment attachments
+        .is('comment_id', null);
 
       if (error) throw error;
       setAttachments(data || []);
@@ -174,22 +176,30 @@ export default function TicketDetails() {
     return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
   };
 
-  const getStatusColor = (status: TicketStatus) => {
-    switch (status) {
-      case 'resolved': return 'bg-green-100 text-green-800';
-      case 'in_progress': return 'bg-blue-100 text-blue-800';
-      case 'closed': return 'bg-gray-100 text-gray-800';
-      default: return 'bg-orange-100 text-orange-800';
+  const getPriorityColor = (priority: TicketPriority) => {
+    switch (priority) {
+      case 'urgent': return 'destructive';
+      case 'high': return 'secondary';
+      case 'medium': return 'outline';
+      case 'low': return 'default';
+      default: return 'default';
     }
   };
 
-  const getPriorityColor = (priority: TicketPriority) => {
-    switch (priority) {
-      case 'urgent': return 'bg-red-100 text-red-800';
-      case 'high': return 'bg-orange-100 text-orange-800';
-      case 'medium': return 'bg-yellow-100 text-yellow-800';
-      default: return 'bg-green-100 text-green-800';
+  const getStatusColor = (status: TicketStatus) => {
+    switch (status) {
+      case 'open': return 'destructive';
+      case 'in_progress': return 'secondary';
+      case 'resolved': return 'default';
+      case 'closed': return 'outline';
+      default: return 'default';
     }
+  };
+
+  const handleResponseSelect = (content: string) => {
+    // This will be handled by the EnhancedComments component
+    const event = new CustomEvent('insertResponse', { detail: content });
+    window.dispatchEvent(event);
   };
 
   if (loading) {
@@ -219,12 +229,12 @@ export default function TicketDetails() {
   const canModifyTicket = profile?.role === 'support_agent' || profile?.role === 'admin';
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6">
+    <div className="max-w-7xl mx-auto px-4 py-6">
       <div className="mb-6">
-        <Link to="/">
+        <Link to="/tickets">
           <Button variant="outline" className="mb-4">
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Dashboard
+            Back to Tickets
           </Button>
         </Link>
         
@@ -235,10 +245,10 @@ export default function TicketDetails() {
           </div>
           
           <div className="flex gap-2">
-            <Badge className={getStatusColor(ticket.status)}>
+            <Badge variant={getStatusColor(ticket.status)}>
               {ticket.status.replace('_', ' ')}
             </Badge>
-            <Badge className={getPriorityColor(ticket.priority)}>
+            <Badge variant={getPriorityColor(ticket.priority)}>
               {ticket.priority}
             </Badge>
           </div>
@@ -340,7 +350,7 @@ export default function TicketDetails() {
               </div>
               <div>
                 <p className="text-sm text-gray-500">Priority</p>
-                <Badge className={getPriorityColor(ticket.priority)}>
+                <Badge variant={getPriorityColor(ticket.priority)}>
                   {ticket.priority}
                 </Badge>
               </div>
@@ -350,6 +360,32 @@ export default function TicketDetails() {
               </div>
             </CardContent>
           </Card>
+
+          {canModifyTicket && (
+            <Card>
+              <CardHeader>
+                <CardTitle>AI Tools</CardTitle>
+                <CardDescription>AI-powered assistance for ticket resolution</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Tabs defaultValue="suggestions" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="suggestions">Response</TabsTrigger>
+                    <TabsTrigger value="bot">Ask AI</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="suggestions" className="mt-4">
+                    <ResponseSuggestions 
+                      ticketId={ticket.id} 
+                      onSelectResponse={handleResponseSelect} 
+                    />
+                  </TabsContent>
+                  <TabsContent value="bot" className="mt-4">
+                    <AIAnswerBot />
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>
