@@ -26,20 +26,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Cleanup function to prevent auth limbo states
-const cleanupAuthState = () => {
-  Object.keys(localStorage).forEach((key) => {
-    if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
-      localStorage.removeItem(key);
-    }
-  });
-  Object.keys(sessionStorage || {}).forEach((key) => {
-    if (key.startsWith('supabase.auth.') || key.includes('sb-')) {
-      sessionStorage.removeItem(key);
-    }
-  });
-};
-
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -78,61 +64,39 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     let mounted = true;
     
-    // Set up auth state listener first
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!mounted) return;
+      
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (session?.user) {
+        fetchProfile(session.user.id).finally(() => {
+          if (mounted) setLoading(false);
+        });
+      } else {
+        setProfile(null);
+        if (mounted) setLoading(false);
+      }
+    });
+
+    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log('Auth state change:', event, session?.user?.id);
-        
+      (event, session) => {
         if (!mounted) return;
         
+        console.log('Auth state change:', event);
         setSession(session);
         setUser(session?.user ?? null);
         
-        if (session?.user) {
-          // Defer profile fetching to prevent deadlocks
-          setTimeout(() => {
-            if (mounted) {
-              fetchProfile(session.user.id).finally(() => {
-                if (mounted) setLoading(false);
-              });
-            }
-          }, 0);
-        } else {
+        if (session?.user && event === 'SIGNED_IN') {
+          fetchProfile(session.user.id);
+        } else if (event === 'SIGNED_OUT') {
           setProfile(null);
-          if (mounted) setLoading(false);
         }
       }
     );
-
-    // Check for existing session
-    const initializeAuth = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error('Error getting session:', error);
-          cleanupAuthState();
-        }
-        
-        if (!mounted) return;
-        
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        if (session?.user) {
-          await fetchProfile(session.user.id);
-        } else {
-          setProfile(null);
-        }
-      } catch (error) {
-        console.error('Error initializing auth:', error);
-        cleanupAuthState();
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    initializeAuth();
 
     return () => {
       mounted = false;
@@ -142,45 +106,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signIn = async (email: string, password: string) => {
     try {
-      setLoading(true);
-      
-      // Clean up any existing state
-      cleanupAuthState();
-      
-      // Attempt to sign out any existing session
-      try {
-        await supabase.auth.signOut({ scope: 'global' });
-      } catch (err) {
-        // Continue even if this fails
-        console.log('Cleanup signout failed:', err);
-      }
-      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       
-      if (error) {
-        setLoading(false);
-        return { error };
-      }
-      
-      // Force page reload for clean state
-      if (data.user) {
-        window.location.href = '/';
-      }
-      
-      return { error: null };
+      return { error };
     } catch (error) {
-      setLoading(false);
       return { error };
     }
   };
 
   const signInWithGoogle = async () => {
     try {
-      cleanupAuthState();
-      
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
@@ -196,8 +134,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signInWithGitHub = async () => {
     try {
-      cleanupAuthState();
-      
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'github',
         options: {
@@ -227,20 +163,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const signOut = async () => {
     try {
-      cleanupAuthState();
-      
-      try {
-        await supabase.auth.signOut({ scope: 'global' });
-      } catch (err) {
-        console.log('Signout error:', err);
-      }
-      
-      // Force page reload for clean state
-      window.location.href = '/login';
+      await supabase.auth.signOut();
     } catch (error) {
       console.error('Error signing out:', error);
-      // Force reload anyway
-      window.location.href = '/login';
     }
   };
 

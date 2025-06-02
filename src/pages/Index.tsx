@@ -5,7 +5,7 @@ import { Navigate } from 'react-router-dom';
 const Index = () => {
   const { user, loading } = useAuth();
 
-  // Show loading spinner while auth is initializing
+  // Show minimal loading while checking auth
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -14,12 +14,8 @@ const Index = () => {
     );
   }
 
-  // Redirect based on auth state
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return <Navigate to="/dashboard" replace />;
+  // Quick redirect based on auth state
+  return user ? <Navigate to="/dashboard" replace /> : <Navigate to="/login" replace />;
 };
 
 export default Index;

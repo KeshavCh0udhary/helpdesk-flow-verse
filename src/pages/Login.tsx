@@ -18,7 +18,7 @@ export default function Login() {
   
   const { signIn, signInWithGoogle, signInWithGitHub, user, loading } = useAuth();
 
-  // Show loading spinner while auth is initializing
+  // Simplified loading check
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -27,7 +27,7 @@ export default function Login() {
     );
   }
 
-  // Only redirect if we're sure the user is authenticated
+  // Redirect if authenticated
   if (user) {
     return <Navigate to="/" replace />;
   }
@@ -42,11 +42,10 @@ export default function Login() {
       
       if (error) {
         setError(error.message);
-        setLocalLoading(false);
       }
-      // Don't set loading to false here if successful, as we'll redirect
     } catch (err) {
       setError('An unexpected error occurred');
+    } finally {
       setLocalLoading(false);
     }
   };
@@ -84,7 +83,6 @@ export default function Login() {
             </Alert>
           )}
 
-          {/* OAuth Buttons */}
           <div className="space-y-3 mb-6">
             <Button 
               onClick={handleGoogleSignIn} 
