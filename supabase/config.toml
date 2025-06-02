@@ -1,1 +1,93 @@
+
 project_id = "pgwlyvwstgfxekjumkmn"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+
+[db.pooler]
+enabled = false
+port = 54329
+pool_mode = "transaction"
+default_pool_size = 20
+max_client_conn = 100
+
+[realtime]
+enabled = true
+port = 54323
+tenant_id = "realtime-dev"
+encryption_key = "supabase-realtime-dev"
+
+[studio]
+enabled = true
+port = 54324
+api_url = "http://127.0.0.1:54321"
+openai_api_key = "env(OPENAI_API_KEY)"
+
+[inbucket]
+enabled = true
+port = 54325
+smtp_port = 54326
+pop3_port = 54327
+
+[storage]
+enabled = true
+port = 54326
+file_size_limit = "50MiB"
+buckets = []
+
+[auth]
+enabled = true
+port = 54327
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = ["https://127.0.0.1:3000"]
+jwt_expiry = 3600
+enable_anonymous_sign_ins = false
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = false
+
+[auth.sms]
+enable_signup = false
+enable_confirmations = false
+
+[edge_runtime]
+enabled = true
+port = 54328
+
+[analytics]
+enabled = false
+port = 54329
+backend = "postgres"
+
+[functions.ai-answer-bot]
+verify_jwt = false
+
+[functions.ai-response-suggestions]
+verify_jwt = false
+
+[functions.ai-pattern-detector]
+verify_jwt = false
+
+[functions.ai-ticket-routing]
+verify_jwt = false
+
+[functions.create-agent]
+verify_jwt = false
+
+[functions.generate-embeddings]
+verify_jwt = false
+
+[functions.process-pdf-knowledge]
+verify_jwt = false
+
+[functions.send-notification]
+verify_jwt = false
