@@ -2,19 +2,19 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Loader2, Upload, FileText, CheckCircle, AlertCircle, Info, Eye } from 'lucide-react';
+import { Loader2, Upload, FileText, CheckCircle, AlertCircle, Info, Eye, Zap } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useToast } from '@/components/ui/use-toast';
+import { Badge } from '@/components/ui/badge';
 
 interface ProcessedChunk {
   title: string;
   content: string;
   category: string;
   tags: string[];
+  confidence?: number;
 }
 
 interface ProcessingResult {
@@ -22,11 +22,12 @@ interface ProcessingResult {
   chunks: ProcessedChunk[];
   message: string;
   extractedTextSample?: string;
+  processingMethod?: string;
   error?: string;
   details?: string;
 }
 
-export const PDFUploader = () => {
+export const LangChainPDFUploader = () => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [uploading, setUploading] = useState(false);
@@ -36,6 +37,7 @@ export const PDFUploader = () => {
   const [extractedSample, setExtractedSample] = useState<string>('');
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [processingMethod, setProcessingMethod] = useState<string>('');
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
@@ -55,6 +57,7 @@ export const PDFUploader = () => {
         setSuccess(false);
         setProcessedChunks([]);
         setExtractedSample('');
+        setProcessingMethod('');
       }
     }
   });
@@ -66,57 +69,39 @@ export const PDFUploader = () => {
     setError(null);
 
     try {
-      console.log('Starting PDF processing...', uploadedFile.name);
+      console.log('Starting LangChain PDF processing...', uploadedFile.name);
       
       const formData = new FormData();
       formData.append('pdf', uploadedFile);
       formData.append('userId', user.id);
 
-      // Try LangChain processing first, fallback to original if needed
-      let processingResult;
-      
-      try {
-        const { data: langchainData, error: langchainError } = await supabase.functions.invoke('process-pdf-langchain', {
-          body: formData
-        });
-        
-        if (!langchainError && langchainData?.success) {
-          processingResult = langchainData;
-          console.log('LangChain processing successful:', processingResult);
-        } else {
-          throw new Error('LangChain processing failed, trying fallback');
-        }
-      } catch (langchainErr) {
-        console.log('LangChain failed, using original processor:', langchainErr.message);
-        
-        // Fallback to original processing
-        const { data: originalData, error: originalError } = await supabase.functions.invoke('process-pdf-knowledge', {
-          body: formData
-        });
-        
-        if (originalError) throw originalError;
-        processingResult = originalData;
-      }
+      // Call the new LangChain PDF processing edge function
+      const { data, error } = await supabase.functions.invoke('process-pdf-langchain', {
+        body: formData
+      });
 
-      console.log('PDF processing result:', processingResult);
+      if (error) throw error;
 
-      if (processingResult.success && processingResult.chunks && processingResult.chunks.length > 0) {
-        setProcessedChunks(processingResult.chunks);
-        setExtractedSample(processingResult.extractedTextSample || '');
+      console.log('LangChain PDF processing result:', data);
+
+      if (data.success && data.chunks && data.chunks.length > 0) {
+        setProcessedChunks(data.chunks);
+        setExtractedSample(data.extractedTextSample || '');
+        setProcessingMethod(data.processingMethod || 'langchain');
         toast({
-          title: "PDF Processed Successfully",
-          description: `Extracted ${processingResult.chunks.length} Q&A pairs from your PDF.`,
+          title: "PDF Processed with LangChain",
+          description: `Extracted ${data.chunks.length} Q&A pairs using advanced AI processing.`,
         });
       } else {
-        setError(processingResult.error || 'No questions and answers could be extracted from the PDF.');
+        setError(data.error || 'No questions and answers could be extracted from the PDF.');
         toast({
           title: "Processing Failed",
-          description: processingResult.error || 'Failed to extract Q&A content from PDF.',
+          description: data.error || 'Failed to extract Q&A content from PDF.',
           variant: "destructive",
         });
       }
     } catch (error) {
-      console.error('Error processing PDF:', error);
+      console.error('Error processing PDF with LangChain:', error);
       setError(error.message || 'Failed to process PDF');
       toast({
         title: "Processing Failed",
@@ -212,6 +197,7 @@ export const PDFUploader = () => {
     setError(null);
     setProcessedChunks([]);
     setExtractedSample('');
+    setProcessingMethod('');
   };
 
   if (success && processedChunks.length === 0) {
@@ -220,9 +206,9 @@ export const PDFUploader = () => {
         <CardContent className="flex items-center justify-center py-8">
           <div className="text-center">
             <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
-            <p className="text-lg font-medium">PDF processed successfully!</p>
+            <p className="text-lg font-medium">PDF processed successfully with LangChain!</p>
             <p className="text-sm text-gray-600 mt-2">
-              Q&A content has been added to your knowledge base.
+              Q&A content has been added to your knowledge base using advanced AI processing.
             </p>
             <Button onClick={resetForm} className="mt-4">
               Upload Another PDF
@@ -237,18 +223,18 @@ export const PDFUploader = () => {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <FileText className="h-5 w-5" />
-          PDF Q&A Extractor
+          <Zap className="h-5 w-5 text-blue-500" />
+          LangChain PDF Q&A Extractor
         </CardTitle>
         <CardDescription>
-          Upload PDF documents to automatically extract questions and answers for your knowledge base
+          Advanced PDF processing using LangChain and AI to extract questions and answers
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
           <Info className="h-4 w-4 text-blue-600" />
           <span className="text-sm text-blue-700">
-            Best results with PDFs containing Q&A sections, FAQ lists, or structured question-answer content.
+            Powered by LangChain and OpenAI for superior text extraction and Q&A recognition.
           </span>
         </div>
 
@@ -286,8 +272,8 @@ export const PDFUploader = () => {
             </div>
             <div className="flex gap-2">
               <Button onClick={processPDF} className="flex-1">
-                <Eye className="h-4 w-4 mr-2" />
-                Extract Q&A Content
+                <Zap className="h-4 w-4 mr-2" />
+                Process with LangChain
               </Button>
               <Button variant="outline" onClick={resetForm}>
                 Remove
@@ -300,8 +286,8 @@ export const PDFUploader = () => {
           <div className="flex items-center justify-center py-8">
             <div className="text-center">
               <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-              <p className="font-medium">Processing PDF...</p>
-              <p className="text-sm text-gray-600">Extracting questions and answers from your document</p>
+              <p className="font-medium">Processing with LangChain...</p>
+              <p className="text-sm text-gray-600">Using advanced AI to extract Q&A content</p>
             </div>
           </div>
         )}
@@ -326,9 +312,17 @@ export const PDFUploader = () => {
         {processedChunks.length > 0 && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-medium">
-                Extracted Q&A Content ({processedChunks.length} pairs found)
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-medium">
+                  Extracted Q&A Content ({processedChunks.length} pairs found)
+                </h3>
+                {processingMethod && (
+                  <Badge variant="secondary" className="text-xs">
+                    <Zap className="h-3 w-3 mr-1" />
+                    {processingMethod}
+                  </Badge>
+                )}
+              </div>
               <Button onClick={addToKnowledgeBase} disabled={uploading}>
                 {uploading ? (
                   <>
@@ -357,9 +351,16 @@ export const PDFUploader = () => {
                 <div key={index} className="p-4 bg-gray-50 rounded-lg border">
                   <div className="flex items-start justify-between mb-2">
                     <h4 className="font-medium text-sm text-blue-700">Q: {chunk.title}</h4>
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                      {chunk.category}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                        {chunk.category}
+                      </span>
+                      {chunk.confidence && (
+                        <Badge variant="outline" className="text-xs">
+                          {Math.round(chunk.confidence * 100)}%
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                   <p className="text-sm text-gray-700 mb-2">
                     <span className="font-medium">A:</span> {chunk.content}
