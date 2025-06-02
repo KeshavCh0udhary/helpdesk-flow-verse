@@ -2,7 +2,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ResponseSuggestions } from '@/components/ai/ResponseSuggestions';
-import { EnhancedAIAnswerBot } from '@/components/ai/EnhancedAIAnswerBot';
+import { AIAnswerBot } from '@/components/ai/AIAnswerBot';
 
 interface AIToolsPanelProps {
   ticketId: string;
@@ -16,14 +16,14 @@ export const AIToolsPanel = ({ ticketId, onResponseSelect, canModifyTicket }: AI
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Enhanced AI Tools</CardTitle>
-        <CardDescription>LangChain-powered AI assistance for ticket resolution</CardDescription>
+        <CardTitle>AI Tools</CardTitle>
+        <CardDescription>AI-powered assistance for ticket resolution</CardDescription>
       </CardHeader>
       <CardContent>
         <Tabs defaultValue="suggestions" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="suggestions">Response</TabsTrigger>
-            <TabsTrigger value="bot">AI Assistant</TabsTrigger>
+            <TabsTrigger value="bot">Ask AI</TabsTrigger>
           </TabsList>
           <TabsContent value="suggestions" className="mt-4">
             <ResponseSuggestions 
@@ -32,7 +32,7 @@ export const AIToolsPanel = ({ ticketId, onResponseSelect, canModifyTicket }: AI
             />
           </TabsContent>
           <TabsContent value="bot" className="mt-4">
-            <EnhancedAIAnswerBot />
+            <AIAnswerBot />
           </TabsContent>
         </Tabs>
       </CardContent>

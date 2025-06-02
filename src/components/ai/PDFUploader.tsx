@@ -4,11 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Upload, FileText, CheckCircle, AlertCircle, Info, Eye } from 'lucide-react';
+import { Loader2, Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { useToast } from '@/components/ui/use-toast';
 
 interface ProcessedChunk {
   title: string;
@@ -17,23 +16,12 @@ interface ProcessedChunk {
   tags: string[];
 }
 
-interface ProcessingResult {
-  success: boolean;
-  chunks: ProcessedChunk[];
-  message: string;
-  extractedTextSample?: string;
-  error?: string;
-  details?: string;
-}
-
 export const PDFUploader = () => {
   const { user } = useAuth();
-  const { toast } = useToast();
   const [uploading, setUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [processedChunks, setProcessedChunks] = useState<ProcessedChunk[]>([]);
-  const [extractedSample, setExtractedSample] = useState<string>('');
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,19 +30,11 @@ export const PDFUploader = () => {
       'application/pdf': ['.pdf']
     },
     maxFiles: 1,
-    maxSize: 10 * 1024 * 1024, // 10MB limit
-    onDrop: (acceptedFiles, rejectedFiles) => {
-      if (rejectedFiles.length > 0) {
-        setError('File rejected. Please ensure it\'s a PDF under 10MB.');
-        return;
-      }
-      
+    onDrop: (acceptedFiles) => {
       if (acceptedFiles.length > 0) {
         setUploadedFile(acceptedFiles[0]);
         setError(null);
         setSuccess(false);
-        setProcessedChunks([]);
-        setExtractedSample('');
       }
     }
   });
@@ -66,63 +46,23 @@ export const PDFUploader = () => {
     setError(null);
 
     try {
-      console.log('Starting PDF processing...', uploadedFile.name);
-      
+      // Create FormData to send the PDF file
       const formData = new FormData();
       formData.append('pdf', uploadedFile);
       formData.append('userId', user.id);
 
-      // Try LangChain processing first, fallback to original if needed
-      let processingResult;
-      
-      try {
-        const { data: langchainData, error: langchainError } = await supabase.functions.invoke('process-pdf-langchain', {
-          body: formData
-        });
-        
-        if (!langchainError && langchainData?.success) {
-          processingResult = langchainData;
-          console.log('LangChain processing successful:', processingResult);
-        } else {
-          throw new Error('LangChain processing failed, trying fallback');
-        }
-      } catch (langchainErr) {
-        console.log('LangChain failed, using original processor:', langchainErr.message);
-        
-        // Fallback to original processing
-        const { data: originalData, error: originalError } = await supabase.functions.invoke('process-pdf-knowledge', {
-          body: formData
-        });
-        
-        if (originalError) throw originalError;
-        processingResult = originalData;
-      }
+      // Call the PDF processing edge function
+      const { data, error } = await supabase.functions.invoke('process-pdf-knowledge', {
+        body: formData
+      });
 
-      console.log('PDF processing result:', processingResult);
+      if (error) throw error;
 
-      if (processingResult.success && processingResult.chunks && processingResult.chunks.length > 0) {
-        setProcessedChunks(processingResult.chunks);
-        setExtractedSample(processingResult.extractedTextSample || '');
-        toast({
-          title: "PDF Processed Successfully",
-          description: `Extracted ${processingResult.chunks.length} Q&A pairs from your PDF.`,
-        });
-      } else {
-        setError(processingResult.error || 'No questions and answers could be extracted from the PDF.');
-        toast({
-          title: "Processing Failed",
-          description: processingResult.error || 'Failed to extract Q&A content from PDF.',
-          variant: "destructive",
-        });
-      }
+      setProcessedChunks(data.chunks || []);
+      setSuccess(true);
     } catch (error) {
       console.error('Error processing PDF:', error);
       setError(error.message || 'Failed to process PDF');
-      toast({
-        title: "Processing Failed",
-        description: "Failed to extract content from PDF. Please try again.",
-        variant: "destructive",
-      });
     } finally {
       setProcessing(false);
     }
@@ -133,85 +73,46 @@ export const PDFUploader = () => {
 
     setUploading(true);
     try {
-      let successCount = 0;
-      let errorCount = 0;
-
       for (const chunk of processedChunks) {
-        try {
-          // Insert the chunk into knowledge base
-          const { data: newEntry, error } = await supabase
-            .from('knowledge_base')
-            .insert({
-              title: chunk.title,
-              content: chunk.content,
-              category: chunk.category,
-              tags: chunk.tags,
-              created_by_user_id: user.id
-            })
-            .select()
-            .single();
+        // Insert the chunk into knowledge base
+        const { data: newEntry, error } = await supabase
+          .from('knowledge_base')
+          .insert({
+            title: chunk.title,
+            content: chunk.content,
+            category: chunk.category,
+            tags: chunk.tags,
+            created_by_user_id: user.id
+          })
+          .select()
+          .single();
 
-          if (error) {
-            console.error('Error inserting chunk:', error);
-            errorCount++;
-            continue;
-          }
+        if (error) {
+          console.error('Error inserting chunk:', error);
+          continue;
+        }
 
-          // Generate embedding for the new entry
-          if (newEntry) {
-            await supabase.functions.invoke('generate-embeddings', {
-              body: {
-                text: `${chunk.title} ${chunk.content}`,
-                table: 'knowledge_base',
-                id: newEntry.id
-              }
-            });
-          }
-
-          successCount++;
-        } catch (chunkError) {
-          console.error('Error processing chunk:', chunkError);
-          errorCount++;
+        // Generate embedding for the new entry
+        if (newEntry) {
+          await supabase.functions.invoke('generate-embeddings', {
+            body: {
+              text: `${chunk.title} ${chunk.content}`,
+              table: 'knowledge_base',
+              id: newEntry.id
+            }
+          });
         }
       }
 
-      if (successCount > 0) {
-        setSuccess(true);
-        setUploadedFile(null);
-        setProcessedChunks([]);
-        setExtractedSample('');
-        toast({
-          title: "Added to Knowledge Base",
-          description: `Successfully added ${successCount} Q&A pairs to the knowledge base.`,
-        });
-      }
-
-      if (errorCount > 0) {
-        toast({
-          title: "Partial Success",
-          description: `${successCount} entries added, ${errorCount} failed. Check console for details.`,
-          variant: "destructive",
-        });
-      }
+      setSuccess(true);
+      setUploadedFile(null);
+      setProcessedChunks([]);
     } catch (error) {
       console.error('Error adding to knowledge base:', error);
       setError('Failed to add content to knowledge base');
-      toast({
-        title: "Upload Failed",
-        description: "Failed to add content to knowledge base. Please try again.",
-        variant: "destructive",
-      });
     } finally {
       setUploading(false);
     }
-  };
-
-  const resetForm = () => {
-    setSuccess(false);
-    setUploadedFile(null);
-    setError(null);
-    setProcessedChunks([]);
-    setExtractedSample('');
   };
 
   if (success && processedChunks.length === 0) {
@@ -222,9 +123,16 @@ export const PDFUploader = () => {
             <CheckCircle className="h-12 w-12 text-green-500 mx-auto mb-4" />
             <p className="text-lg font-medium">PDF processed successfully!</p>
             <p className="text-sm text-gray-600 mt-2">
-              Q&A content has been added to your knowledge base.
+              Content has been added to your knowledge base.
             </p>
-            <Button onClick={resetForm} className="mt-4">
+            <Button 
+              onClick={() => {
+                setSuccess(false);
+                setUploadedFile(null);
+                setError(null);
+              }} 
+              className="mt-4"
+            >
               Upload Another PDF
             </Button>
           </div>
@@ -238,20 +146,13 @@ export const PDFUploader = () => {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <FileText className="h-5 w-5" />
-          PDF Q&A Extractor
+          PDF Knowledge Base Upload
         </CardTitle>
         <CardDescription>
-          Upload PDF documents to automatically extract questions and answers for your knowledge base
+          Upload PDF documents to automatically extract and add content to your knowledge base
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-          <Info className="h-4 w-4 text-blue-600" />
-          <span className="text-sm text-blue-700">
-            Best results with PDFs containing Q&A sections, FAQ lists, or structured question-answer content.
-          </span>
-        </div>
-
         {!uploadedFile && (
           <div
             {...getRootProps()}
@@ -269,7 +170,6 @@ export const PDFUploader = () => {
               <div>
                 <p className="text-lg font-medium">Drag & drop a PDF file here</p>
                 <p className="text-sm text-gray-600 mt-1">or click to select a file</p>
-                <p className="text-xs text-gray-500 mt-2">PDF files up to 10MB</p>
               </div>
             )}
           </div>
@@ -284,51 +184,31 @@ export const PDFUploader = () => {
                 ({(uploadedFile.size / 1024 / 1024).toFixed(2)} MB)
               </span>
             </div>
-            <div className="flex gap-2">
-              <Button onClick={processPDF} className="flex-1">
-                <Eye className="h-4 w-4 mr-2" />
-                Extract Q&A Content
-              </Button>
-              <Button variant="outline" onClick={resetForm}>
-                Remove
-              </Button>
-            </div>
+            <Button onClick={processPDF} className="w-full">
+              <FileText className="h-4 w-4 mr-2" />
+              Process PDF
+            </Button>
           </div>
         )}
 
         {processing && (
           <div className="flex items-center justify-center py-8">
-            <div className="text-center">
-              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
-              <p className="font-medium">Processing PDF...</p>
-              <p className="text-sm text-gray-600">Extracting questions and answers from your document</p>
-            </div>
+            <Loader2 className="h-6 w-6 animate-spin mr-2" />
+            <span>Processing PDF and extracting content...</span>
           </div>
         )}
 
         {error && (
           <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
             <AlertCircle className="h-4 w-4 text-red-600" />
-            <div className="flex-1">
-              <span className="text-sm text-red-600 font-medium">{error}</span>
-              {extractedSample && (
-                <details className="mt-2">
-                  <summary className="text-xs text-red-500 cursor-pointer">View extracted sample</summary>
-                  <pre className="text-xs text-red-500 mt-1 whitespace-pre-wrap bg-red-100 p-2 rounded">
-                    {extractedSample}
-                  </pre>
-                </details>
-              )}
-            </div>
+            <span className="text-sm text-red-600">{error}</span>
           </div>
         )}
 
         {processedChunks.length > 0 && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-medium">
-                Extracted Q&A Content ({processedChunks.length} pairs found)
-              </h3>
+              <h3 className="font-medium">Extracted Content ({processedChunks.length} sections)</h3>
               <Button onClick={addToKnowledgeBase} disabled={uploading}>
                 {uploading ? (
                   <>
@@ -340,44 +220,20 @@ export const PDFUploader = () => {
                 )}
               </Button>
             </div>
-
-            {extractedSample && (
-              <details className="p-3 bg-gray-50 rounded-lg">
-                <summary className="text-sm font-medium cursor-pointer text-gray-700">
-                  View extracted text sample
-                </summary>
-                <pre className="text-xs text-gray-600 mt-2 whitespace-pre-wrap">
-                  {extractedSample}
-                </pre>
-              </details>
-            )}
-
-            <div className="max-h-96 overflow-y-auto space-y-3 border rounded-lg p-4">
+            <div className="max-h-64 overflow-y-auto space-y-2">
               {processedChunks.map((chunk, index) => (
-                <div key={index} className="p-4 bg-gray-50 rounded-lg border">
-                  <div className="flex items-start justify-between mb-2">
-                    <h4 className="font-medium text-sm text-blue-700">Q: {chunk.title}</h4>
+                <div key={index} className="p-3 bg-gray-50 rounded-lg">
+                  <h4 className="font-medium text-sm">{chunk.title}</h4>
+                  <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+                    {chunk.content.substring(0, 150)}...
+                  </p>
+                  <div className="flex gap-1 mt-2">
                     <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
                       {chunk.category}
                     </span>
                   </div>
-                  <p className="text-sm text-gray-700 mb-2">
-                    <span className="font-medium">A:</span> {chunk.content}
-                  </p>
-                  <div className="flex gap-1 flex-wrap">
-                    {chunk.tags.slice(0, 4).map((tag, tagIndex) => (
-                      <span key={tagIndex} className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
                 </div>
               ))}
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={resetForm} className="flex-1">
-                Cancel
-              </Button>
             </div>
           </div>
         )}
