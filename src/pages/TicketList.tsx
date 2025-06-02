@@ -19,6 +19,12 @@ const TicketList = () => {
 
   const filteredTickets = filterTickets(tickets, searchTerm, statusFilter, priorityFilter);
 
+  // Dynamic title based on user role
+  const pageTitle = profile?.role === 'admin' ? 'All Tickets' : 'My Tickets';
+  const pageDescription = profile?.role === 'admin' 
+    ? 'Manage and track all support tickets in the system'
+    : 'Manage and track your support tickets';
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -31,8 +37,8 @@ const TicketList = () => {
     <div className="max-w-7xl mx-auto px-4 py-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">My Tickets</h1>
-          <p className="text-gray-600">Manage and track your support tickets</p>
+          <h1 className="text-3xl font-bold text-gray-900">{pageTitle}</h1>
+          <p className="text-gray-600">{pageDescription}</p>
         </div>
         {profile?.role === 'employee' && (
           <Link to="/tickets/new">

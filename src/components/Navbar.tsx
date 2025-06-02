@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -18,14 +19,14 @@ import {
   X,
   Home,
   Ticket,
-  Plus,
   Search,
   BarChart3,
   Users,
   Building2,
   FileText,
   Bot,
-  Brain
+  Brain,
+  Cog
 } from 'lucide-react';
 import { NotificationBell } from './NotificationBell';
 
@@ -47,7 +48,6 @@ export const Navbar = () => {
   const navigationItems = [
     { path: '/dashboard', label: 'Dashboard', icon: Home, roles: ['admin', 'support_agent', 'employee'] },
     { path: '/tickets', label: 'Tickets', icon: Ticket, roles: ['admin', 'support_agent', 'employee'] },
-    { path: '/tickets/new', label: 'New Ticket', icon: Plus, roles: ['admin', 'support_agent', 'employee'] },
     { path: '/ai-bot', label: 'AI Assistant', icon: Bot, roles: ['admin', 'support_agent', 'employee'] },
     { path: '/knowledge-base', label: 'Knowledge Base', icon: Brain, roles: ['admin', 'support_agent'] },
     { path: '/search', label: 'Search', icon: Search, roles: ['admin', 'support_agent', 'employee'] },
@@ -55,13 +55,32 @@ export const Navbar = () => {
   ];
 
   const adminItems = [
-    { path: '/admin/user-management', label: 'Users', icon: Users },
-    { path: '/admin/department-management', label: 'Departments', icon: Building2 },
-    { path: '/admin/queue-management', label: 'Queues', icon: FileText },
-    { path: '/admin/ticket-management', label: 'Ticket Management', icon: Ticket },
-    { path: '/admin/add-agent', label: 'Add Agent', icon: Plus },
-    { path: '/admin/file-management', label: 'Files', icon: FileText },
+    { 
+      label: 'User Management',
+      items: [
+        { path: '/admin/user-management', label: 'Manage Users', icon: Users },
+        { path: '/admin/add-agent', label: 'Add Agent', icon: Users },
+      ]
+    },
+    { 
+      label: 'System Management',
+      items: [
+        { path: '/admin/department-management', label: 'Departments', icon: Building2 },
+        { path: '/admin/queue-management', label: 'Queues', icon: FileText },
+        { path: '/admin/ticket-management', label: 'Ticket Management', icon: Ticket },
+        { path: '/admin/file-management', label: 'File Management', icon: FileText },
+      ]
+    }
   ];
+
+  const getRoleBadgeVariant = (role: string) => {
+    switch (role) {
+      case 'admin': return 'destructive';
+      case 'support_agent': return 'default';
+      case 'employee': return 'secondary';
+      default: return 'outline';
+    }
+  };
 
   if (!user) {
     return (
@@ -125,42 +144,57 @@ export const Navbar = () => {
           <div className="flex items-center space-x-4">
             <NotificationBell />
             
-            {/* Admin Dropdown */}
+            {/* Admin Dropdown - Organized */}
             {profile?.role === 'admin' && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="sm">
-                    <Settings className="h-4 w-4 mr-2" />
+                    <Cog className="h-4 w-4 mr-2" />
                     Admin
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
-                  {adminItems.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <DropdownMenuItem key={item.path} asChild>
-                        <Link to={item.path} className="flex items-center">
-                          <Icon className="h-4 w-4 mr-2" />
-                          {item.label}
-                        </Link>
-                      </DropdownMenuItem>
-                    );
-                  })}
+                  {adminItems.map((group, groupIndex) => (
+                    <div key={group.label}>
+                      <div className="px-2 py-1.5 text-sm font-semibold text-gray-900">
+                        {group.label}
+                      </div>
+                      {group.items.map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <DropdownMenuItem key={item.path} asChild>
+                            <Link to={item.path} className="flex items-center">
+                              <Icon className="h-4 w-4 mr-2" />
+                              {item.label}
+                            </Link>
+                          </DropdownMenuItem>
+                        );
+                      })}
+                      {groupIndex < adminItems.length - 1 && <DropdownMenuSeparator />}
+                    </div>
+                  ))}
                 </DropdownMenuContent>
               </DropdownMenu>
             )}
 
-            {/* User Menu */}
+            {/* Enhanced User Menu */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm">
+                <Button variant="ghost" size="sm" className="flex items-center gap-2">
                   <User className="h-5 w-5" />
+                  <span className="hidden sm:block">{profile?.full_name || 'User'}</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem disabled>
-                  Signed in as {user.email}
-                </DropdownMenuItem>
+              <DropdownMenuContent align="end" className="w-64">
+                <div className="px-3 py-2 border-b">
+                  <p className="font-medium">{profile?.full_name || 'Unknown User'}</p>
+                  <p className="text-sm text-gray-500">{user.email}</p>
+                  <div className="mt-2">
+                    <Badge variant={getRoleBadgeVariant(profile?.role || 'employee')}>
+                      {profile?.role?.replace('_', ' ').toUpperCase() || 'EMPLOYEE'}
+                    </Badge>
+                  </div>
+                </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleSignOut}>
                   <LogOut className="h-4 w-4 mr-2" />
@@ -218,7 +252,7 @@ export const Navbar = () => {
                       Admin
                     </div>
                   </div>
-                  {adminItems.map((item) => {
+                  {adminItems.flatMap(group => group.items).map((item) => {
                     const Icon = item.icon;
                     return (
                       <Link

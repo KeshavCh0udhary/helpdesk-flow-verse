@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -10,6 +11,7 @@ import { TicketTrends } from '@/components/reports/TicketTrends';
 import { ResolutionMetrics } from '@/components/reports/ResolutionMetrics';
 import { AgentPerformance } from '@/components/reports/AgentPerformance';
 import { DepartmentAnalytics } from '@/components/reports/DepartmentAnalytics';
+import { PatternInsights } from '@/components/ai/PatternInsights';
 
 interface ReportData {
   ticketsByDay: Array<{ date: string; count: number }>;
@@ -25,6 +27,7 @@ interface ReportData {
 }
 
 export default function Reports() {
+  const { profile } = useAuth();
   const [reportData, setReportData] = useState<ReportData>({
     ticketsByDay: [],
     resolutionTimes: [],
@@ -37,7 +40,7 @@ export default function Reports() {
 
   useEffect(() => {
     fetchReportData();
-  }, [dateRange]);
+  }, [dateRange, profile]);
 
   const fetchReportData = async () => {
     try {
@@ -46,11 +49,18 @@ export default function Reports() {
       const startDate = new Date();
       startDate.setDate(startDate.getDate() - days);
 
-      // Fetch tickets by day
-      const { data: tickets } = await supabase
+      // Build base query with department filter for agents
+      let ticketsQuery = supabase
         .from('tickets')
         .select('created_at, status, department_id')
         .gte('created_at', startDate.toISOString());
+
+      // Filter by department for support agents
+      if (profile?.role === 'support_agent' && profile?.department_id) {
+        ticketsQuery = ticketsQuery.eq('department_id', profile.department_id);
+      }
+
+      const { data: tickets } = await ticketsQuery;
 
       // Process tickets by day
       const ticketsByDay = Array.from({ length: days }, (_, i) => {
@@ -68,8 +78,8 @@ export default function Reports() {
         };
       });
 
-      // Fetch department stats with enhanced data
-      const { data: departments } = await supabase
+      // Fetch department stats with filtering
+      let departmentsQuery = supabase
         .from('departments')
         .select(`
           id,
@@ -81,6 +91,13 @@ export default function Reports() {
             resolved_at
           )
         `);
+
+      // Filter departments for support agents
+      if (profile?.role === 'support_agent' && profile?.department_id) {
+        departmentsQuery = departmentsQuery.eq('id', profile.department_id);
+      }
+
+      const { data: departments } = await departmentsQuery;
 
       const departmentStats = departments?.map(dept => {
         const total = dept.tickets?.length || 0;
@@ -119,17 +136,25 @@ export default function Reports() {
         };
       });
 
-      // Enhanced agent performance data
-      const { data: agentTickets } = await supabase
+      // Enhanced agent performance data with department filtering
+      let agentTicketsQuery = supabase
         .from('tickets')
         .select(`
           assigned_to_agent_id,
           status,
           created_at,
-          resolved_at
+          resolved_at,
+          department_id
         `)
         .not('assigned_to_agent_id', 'is', null)
         .gte('created_at', startDate.toISOString());
+
+      // Filter by department for support agents
+      if (profile?.role === 'support_agent' && profile?.department_id) {
+        agentTicketsQuery = agentTicketsQuery.eq('department_id', profile.department_id);
+      }
+
+      const { data: agentTickets } = await agentTicketsQuery;
 
       const agentIds = [...new Set(agentTickets?.map(t => t.assigned_to_agent_id).filter(Boolean))];
       const { data: agentProfiles } = await supabase
@@ -208,6 +233,20 @@ export default function Reports() {
     URL.revokeObjectURL(url);
   };
 
+  const getReportsTitle = () => {
+    if (profile?.role === 'support_agent') {
+      return 'Department Analytics & Reports';
+    }
+    return 'Analytics & Reports';
+  };
+
+  const getReportsDescription = () => {
+    if (profile?.role === 'support_agent') {
+      return 'Performance insights and metrics for your department';
+    }
+    return 'Comprehensive insights and performance metrics';
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -220,8 +259,8 @@ export default function Reports() {
     <div className="max-w-7xl mx-auto px-4 py-6">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Analytics & Reports</h1>
-          <p className="text-gray-600">Comprehensive insights and performance metrics</p>
+          <h1 className="text-3xl font-bold text-gray-900">{getReportsTitle()}</h1>
+          <p className="text-gray-600">{getReportsDescription()}</p>
         </div>
         <div className="flex items-center gap-3">
           <Select value={dateRange} onValueChange={setDateRange}>
@@ -248,11 +287,12 @@ export default function Reports() {
       </div>
 
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="performance">Performance</TabsTrigger>
           <TabsTrigger value="departments">Departments</TabsTrigger>
           <TabsTrigger value="trends">Trends</TabsTrigger>
+          <TabsTrigger value="ai-insights">AI Insights</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -306,6 +346,10 @@ export default function Reports() {
             <TicketTrends data={reportData.ticketsByDay} />
             <ResolutionMetrics data={reportData.resolutionTimes} />
           </div>
+        </TabsContent>
+
+        <TabsContent value="ai-insights">
+          <PatternInsights />
         </TabsContent>
       </Tabs>
     </div>
