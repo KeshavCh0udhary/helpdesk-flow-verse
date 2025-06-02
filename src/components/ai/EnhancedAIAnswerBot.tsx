@@ -39,14 +39,15 @@ export const EnhancedAIAnswerBot = () => {
 
     setLoading(true);
     try {
-      const sessionId = `enhanced_session_${Date.now()}_${user.id}`;
+      const sessionId = `langchain_session_${Date.now()}_${user.id}`;
       
-      const { data, error } = await supabase.functions.invoke('ai-answer-bot', {
+      // Use the new LangChain-powered AI function
+      const { data, error } = await supabase.functions.invoke('ai-answer-langchain', {
         body: {
           question: question.trim(),
           sessionId,
           userId: user.id,
-          conversationHistory: conversationHistory.slice(-3) // Send last 3 exchanges for context
+          conversationHistory: conversationHistory.slice(-3)
         }
       });
 
@@ -62,7 +63,15 @@ export const EnhancedAIAnswerBot = () => {
       }]);
       
     } catch (error) {
-      console.error('Error asking Enhanced AI:', error);
+      console.error('Error asking LangChain AI:', error);
+      setResponse({
+        answer: "I apologize, but I'm having trouble processing your question right now. Please try again later.",
+        confidence: 0,
+        sources: [],
+        sessionId: `error_${Date.now()}`,
+        usedFallback: true,
+        reasoning: "Service temporarily unavailable"
+      });
     } finally {
       setLoading(false);
     }
@@ -102,10 +111,10 @@ export const EnhancedAIAnswerBot = () => {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Brain className="h-5 w-5 text-blue-500" />
-          Enhanced AI Answer Bot
+          LangChain AI Assistant
         </CardTitle>
         <CardDescription>
-          Advanced AI assistant powered by LangChain and OpenAI with conversation memory
+          Advanced AI assistant powered by LangChain with retrieval-augmented generation
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -152,22 +161,26 @@ export const EnhancedAIAnswerBot = () => {
                     <Brain className="h-3 w-3 mr-1" />
                     {response.sources.length} sources
                   </Badge>
+                  <Badge variant="secondary" className="text-xs">
+                    <Zap className="h-3 w-3 mr-1" />
+                    LangChain RAG
+                  </Badge>
                 </>
               )}
             </div>
 
             <div className={`p-4 rounded-lg ${response.usedFallback ? 'bg-orange-50 border border-orange-200' : 'bg-gray-50'}`}>
               <p className="text-gray-900">{response.answer}</p>
-              {response.usedFallback && (
-                <p className="text-sm text-orange-700 mt-2">
-                  This response indicates that the available information was insufficient to answer your question.
+              {response.reasoning && (
+                <p className="text-sm text-gray-600 mt-2 italic">
+                  Reasoning: {response.reasoning}
                 </p>
               )}
             </div>
 
             {response.sources.length > 0 && !response.usedFallback && (
               <div>
-                <h4 className="font-medium text-sm text-gray-700 mb-2">Information Sources:</h4>
+                <h4 className="font-medium text-sm text-gray-700 mb-2">Knowledge Sources:</h4>
                 <div className="space-y-1">
                   {response.sources.map((source) => (
                     <div key={source.id} className="flex items-center justify-between text-sm bg-white p-2 rounded border">
