@@ -102,16 +102,26 @@ serve(async (req) => {
     const embeddingData = await embeddingResponse.json();
     const queryEmbedding = embeddingData.data[0].embedding;
 
-    // Search for relevant knowledge base entries
+    // Search for relevant knowledge base entries with lowered threshold
     const { data: similarEntries, error: searchError } = await supabaseClient
       .rpc('similarity_search_knowledge_base', {
         query_embedding: queryEmbedding,
-        match_threshold: 0.78,
+        match_threshold: 0.7, // Lowered from 0.78 to 0.7
         match_count: 5
       });
 
     if (searchError) {
       console.error('Knowledge base search error:', searchError);
+    }
+
+    // Enhanced debugging - log similarity scores
+    console.log(`Found ${similarEntries?.length || 0} potential matches for question: "${question}"`);
+    if (similarEntries && similarEntries.length > 0) {
+      similarEntries.forEach((entry, index) => {
+        console.log(`Match ${index + 1}: Title="${entry.title}", Similarity=${entry.similarity}, Category=${entry.category}`);
+      });
+    } else {
+      console.log('No matches found above threshold 0.7');
     }
 
     let contextChunksText = '';
@@ -144,7 +154,8 @@ serve(async (req) => {
           metadata: {
             similar_entries_count: 0,
             fallback_used: true,
-            history_length: conversationHistory.length
+            history_length: conversationHistory.length,
+            threshold_used: 0.7
           }
         });
 
@@ -241,7 +252,8 @@ Respond to the LATEST User Question based ONLY on the "Knowledge Base Context Ch
           top_similarity: confidenceScore,
           chunks_provided_count: similarEntries?.length || 0,
           history_length: conversationHistory.length,
-          model_used: 'gpt-4o-mini'
+          model_used: 'gpt-4o-mini',
+          threshold_used: 0.7
         }
       });
 
