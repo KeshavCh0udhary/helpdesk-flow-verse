@@ -131,7 +131,7 @@ ${contextChunks}`;
           { role: 'system', content: systemPrompt },
           { role: 'user', content: question }
         ],
-        temperature: 0.1, // Lower temperature for more consistent responses
+        temperature: 0.3, // Lower temperature for more consistent responses
         max_tokens: 500,
       }),
     });
