@@ -20,7 +20,7 @@
 
 The project is deployed on Vercel and can be accessed here:
 
-[https://helpdesk-flow-verse-9o2k1ghjw-keshavch0udharys-projects.vercel.app](https://helpdesk-flow-verse-9o2k1ghjw-keshavch0udharys-projects.vercel.app)
+[https://helpdesk-flow-verse.vercel.app](https://helpdesk-flow-verse.vercel.app)
 
 ## Overview of AI Features
 
