@@ -7,10 +7,13 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, Plus, Edit, Trash2, Book, Search } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { FAQImporter } from './FAQImporter';
+import { PDFUploader } from './PDFUploader';
+import { KnowledgeBaseOptimizer } from './KnowledgeBaseOptimizer';
 
 interface KnowledgeEntry {
   id: string;
@@ -261,80 +264,103 @@ export const KnowledgeBaseManager = () => {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="flex gap-4 mb-6">
-            <div className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                <Input
-                  placeholder="Search knowledge base..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+          <Tabs defaultValue="manage" className="w-full">
+            <TabsList className="grid w-full grid-cols-4">
+              <TabsTrigger value="manage">Manage</TabsTrigger>
+              <TabsTrigger value="import">Import FAQ</TabsTrigger>
+              <TabsTrigger value="upload">Upload PDF</TabsTrigger>
+              <TabsTrigger value="optimize">Optimize</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="manage" className="space-y-4">
+              <div className="flex gap-4 mb-6">
+                <div className="flex-1">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                    <Input
+                      placeholder="Search knowledge base..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                  <SelectTrigger className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    {categories.map(category => (
+                      <SelectItem key={category} value={category}>{category}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-            </div>
-            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
-                {categories.map(category => (
-                  <SelectItem key={category} value={category}>{category}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
 
-          <div className="space-y-4">
-            {filteredEntries.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <Book className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                <p>No knowledge base entries found</p>
-              </div>
-            ) : (
-              filteredEntries.map((entry) => (
-                <Card key={entry.id}>
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-2">
-                          <h3 className="font-medium">{entry.title}</h3>
-                          <Badge variant="outline">{entry.category}</Badge>
-                          <Badge variant="secondary">{entry.usage_count} uses</Badge>
-                        </div>
-                        <p className="text-sm text-gray-600 mb-2 line-clamp-2">
-                          {entry.content}
-                        </p>
-                        {entry.tags.length > 0 && (
-                          <div className="flex flex-wrap gap-1">
-                            {entry.tags.map((tag, index) => (
-                              <Badge key={index} variant="outline" className="text-xs">
-                                {tag}
-                              </Badge>
-                            ))}
+              <div className="space-y-4">
+                {filteredEntries.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <Book className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                    <p>No knowledge base entries found</p>
+                  </div>
+                ) : (
+                  filteredEntries.map((entry) => (
+                    <Card key={entry.id}>
+                      <CardContent className="p-4">
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <h3 className="font-medium">{entry.title}</h3>
+                              <Badge variant="outline">{entry.category}</Badge>
+                              <Badge variant="secondary">{entry.usage_count} uses</Badge>
+                            </div>
+                            <p className="text-sm text-gray-600 mb-2 line-clamp-2">
+                              {entry.content}
+                            </p>
+                            {entry.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {entry.tags.map((tag, index) => (
+                                  <Badge key={index} variant="outline" className="text-xs">
+                                    {tag}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                      <div className="flex gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => handleEdit(entry)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => handleDelete(entry.id)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
-            )}
-          </div>
+                          <div className="flex gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => handleEdit(entry)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              onClick={() => handleDelete(entry.id)}
+                              className="text-red-600 hover:text-red-700"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))
+                )}
+              </div>
+            </TabsContent>
+            
+            <TabsContent value="import">
+              <FAQImporter />
+            </TabsContent>
+            
+            <TabsContent value="upload">
+              <PDFUploader />
+            </TabsContent>
+            
+            <TabsContent value="optimize">
+              <KnowledgeBaseOptimizer />
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
     </div>

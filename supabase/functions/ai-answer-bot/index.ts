@@ -102,26 +102,26 @@ serve(async (req) => {
     const embeddingData = await embeddingResponse.json();
     const queryEmbedding = embeddingData.data[0].embedding;
 
-    // Search for relevant knowledge base entries with lowered threshold
+    // Search for relevant knowledge base entries with improved threshold
     const { data: similarEntries, error: searchError } = await supabaseClient
       .rpc('similarity_search_knowledge_base', {
         query_embedding: queryEmbedding,
-        match_threshold: 0.7, // Lowered from 0.78 to 0.7
-        match_count: 5
+        match_threshold: 0.6, // Lowered from 0.7 to 0.6 for better matching
+        match_count: 8 // Increased from 5 to 8 for more context
       });
 
     if (searchError) {
       console.error('Knowledge base search error:', searchError);
     }
 
-    // Enhanced debugging - log similarity scores
+    // Enhanced debugging - log similarity scores with more detail
     console.log(`Found ${similarEntries?.length || 0} potential matches for question: "${question}"`);
     if (similarEntries && similarEntries.length > 0) {
       similarEntries.forEach((entry, index) => {
-        console.log(`Match ${index + 1}: Title="${entry.title}", Similarity=${entry.similarity}, Category=${entry.category}`);
+        console.log(`Match ${index + 1}: Title="${entry.title}", Similarity=${entry.similarity}, Category=${entry.category}, Tags=${entry.tags || 'none'}`);
       });
     } else {
-      console.log('No matches found above threshold 0.7');
+      console.log('No matches found above threshold 0.6');
     }
 
     let contextChunksText = '';
@@ -129,16 +129,22 @@ serve(async (req) => {
     const fallbackResponse = "I am unable to answer this question with the available information.";
 
     if (similarEntries && similarEntries.length > 0) {
-      contextChunksText = similarEntries
-        .map((entry, index) => `Chunk ${index + 1} (Source ID: ${entry.id || 'N/A'}):\nTitle: ${entry.title || 'N/A'}\nContent: ${entry.content}\nCategory: ${entry.category || 'N/A'}`)
+      // Filter for higher quality matches (above 0.65) if available
+      const highQualityMatches = similarEntries.filter(entry => entry.similarity > 0.65);
+      const matchesToUse = highQualityMatches.length > 0 ? highQualityMatches : similarEntries.slice(0, 5);
+      
+      contextChunksText = matchesToUse
+        .map((entry, index) => `Knowledge Entry ${index + 1}:\nTitle: ${entry.title || 'N/A'}\nContent: ${entry.content}\nCategory: ${entry.category || 'N/A'}\nRelevance: ${Math.round(entry.similarity * 100)}%`)
         .join('\n\n---\n\n');
-      knowledgeBaseIdForLogging = similarEntries[0].id;
+      knowledgeBaseIdForLogging = matchesToUse[0].id;
+      
+      console.log(`Using ${matchesToUse.length} knowledge entries for context`);
     }
 
     // Fetch conversation history
     const conversationHistory = await getFormattedConversationHistory(supabaseClient, sessionId);
 
-    // If no relevant KB chunks found for the current question, return fallback
+    // Only use fallback if we have no relevant matches above 0.6 threshold
     if (!contextChunksText.trim()) {
       console.log("No relevant knowledge base chunks found for the question. Using fallback.");
       await supabaseClient
@@ -155,7 +161,7 @@ serve(async (req) => {
             similar_entries_count: 0,
             fallback_used: true,
             history_length: conversationHistory.length,
-            threshold_used: 0.7
+            threshold_used: 0.6
           }
         });
 
@@ -174,31 +180,26 @@ serve(async (req) => {
     // Construct messages for OpenAI Chat API, including history
     const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [];
 
-    // Enhanced system prompt with conversation history awareness
-    const systemPrompt = `You are an information retrieval assistant. Your primary role is to answer the LATEST user question strictly and exclusively using the information provided in the "Knowledge Base Context Chunks" section.
+    // Enhanced system prompt with better instructions for knowledge base usage
+    const systemPrompt = `You are a knowledgeable support assistant. Your primary role is to answer user questions using ONLY the information provided in the Knowledge Base entries below.
 
-General Instructions:
-1. Base your answer ONLY on the "Knowledge Base Context Chunks" provided for the LATEST user question.
-2. If the "Knowledge Base Context Chunks" do not contain sufficient information to answer the LATEST user question, or if they do not directly address it, respond with: "${fallbackResponse}"
-3. Do NOT use any information from the "Previous Conversation History" to form your answer, unless that information is also present in the "Knowledge Base Context Chunks" for the current question. The history is for contextual understanding of the LATEST user question only.
-4. Do not introduce any information, infer, or create connections beyond what is explicitly stated in the "Knowledge Base Context Chunks".
-5. Your responses should be concise. Do not explain that you are an AI or that you are using chunks. Just provide the answer or the fallback statement.
-6. If multiple chunks are relevant, synthesize the information cohesively.
-7. If asked about your capabilities or to do something outside of answering based on the provided chunks (e.g., "tell me a joke", "what's the weather"), respond with: "${fallbackResponse}"
-
-Format of Information:
-You will be provided with:
-- (Optional) "Previous Conversation History": For understanding the flow of dialogue.
-- "Knowledge Base Context Chunks": This is the ONLY source for your answers.
-- The "LATEST User Question".
+CRITICAL INSTRUCTIONS:
+1. Base your answer EXCLUSIVELY on the Knowledge Base entries provided below
+2. If the Knowledge Base entries contain information that answers the user's question, provide a clear, helpful response
+3. DO NOT say you cannot answer if relevant information exists in the Knowledge Base
+4. Synthesize information from multiple entries if needed to provide a complete answer
+5. Be conversational and helpful, not robotic
+6. If the Knowledge Base truly lacks sufficient information to answer the question, then respond with: "${fallbackResponse}"
 
 Previous Conversation History:
 ${conversationHistory.length > 0 ? conversationHistory.map(msg => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`).join('\n') : 'No previous conversation history.'}
 
-Knowledge Base Context Chunks for the LATEST User Question:
+Knowledge Base Entries:
 ${contextChunksText}
----
-Respond to the LATEST User Question based ONLY on the "Knowledge Base Context Chunks" above.`;
+
+User Question: ${question}
+
+Instructions: Answer the user's question based on the Knowledge Base entries above. Be helpful and conversational. Only use the fallback response if the Knowledge Base truly cannot help answer their question.`;
 
     messages.push({ role: 'system', content: systemPrompt });
     messages.push({ role: 'user', content: question });
@@ -213,8 +214,8 @@ Respond to the LATEST User Question based ONLY on the "Knowledge Base Context Ch
       body: JSON.stringify({
         model: 'gpt-4o-mini',
         messages: messages,
-        temperature: 0.1,
-        max_tokens: 300,
+        temperature: 0.2, // Lowered for more consistent responses
+        max_tokens: 400, // Increased for more detailed responses
       }),
     });
 
@@ -227,10 +228,10 @@ Respond to the LATEST User Question based ONLY on the "Knowledge Base Context Ch
     const chatData = await chatResponse.json();
     let aiResponse = chatData.choices[0].message.content.trim();
 
-    // Fallback safety check
-    if (!aiResponse || (similarEntries && similarEntries.length === 0 && aiResponse !== fallbackResponse)) {
-      aiResponse = fallbackResponse;
-    }
+    // Enhanced fallback detection - only trigger if response is exactly the fallback
+    const isFallbackResponse = aiResponse === fallbackResponse;
+    
+    console.log(`AI Response generated: ${isFallbackResponse ? 'FALLBACK' : 'KNOWLEDGE-BASED'}`);
 
     // Store interaction and update usage
     const confidenceScore = (similarEntries && similarEntries.length > 0)
@@ -253,7 +254,8 @@ Respond to the LATEST User Question based ONLY on the "Knowledge Base Context Ch
           chunks_provided_count: similarEntries?.length || 0,
           history_length: conversationHistory.length,
           model_used: 'gpt-4o-mini',
-          threshold_used: 0.7
+          threshold_used: 0.6,
+          fallback_used: isFallbackResponse
         }
       });
 
@@ -262,7 +264,7 @@ Respond to the LATEST User Question based ONLY on the "Knowledge Base Context Ch
     }
 
     // Update usage count for the top chunk if KB was actually used
-    if (knowledgeBaseIdForLogging && aiResponse !== fallbackResponse) {
+    if (knowledgeBaseIdForLogging && !isFallbackResponse) {
       const { error: updateError } = await supabaseClient
         .rpc('increment_kb_usage_count', { row_id: knowledgeBaseIdForLogging });
       if (updateError) console.error("Error updating KB usage count:", updateError);
@@ -272,7 +274,7 @@ Respond to the LATEST User Question based ONLY on the "Knowledge Base Context Ch
       JSON.stringify({
         answer: aiResponse,
         confidence: confidenceScore,
-        sources: (aiResponse !== fallbackResponse && similarEntries) 
+        sources: (!isFallbackResponse && similarEntries) 
           ? similarEntries.slice(0, 3).map(e => ({
               id: e.id, 
               title: e.title, 
@@ -281,7 +283,7 @@ Respond to the LATEST User Question based ONLY on the "Knowledge Base Context Ch
             })) 
           : [],
         sessionId,
-        usedFallback: aiResponse === fallbackResponse
+        usedFallback: isFallbackResponse
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
