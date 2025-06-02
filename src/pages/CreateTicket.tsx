@@ -53,12 +53,18 @@ export default function CreateTicket() {
     e.preventDefault();
     if (!user) return;
 
+    // Validate required fields
+    if (!departmentId) {
+      setError('Please select a department');
+      return;
+    }
+
     setLoading(true);
     setError('');
     setSuccess('');
 
     try {
-      // Create the ticket first
+      // Create the ticket with mandatory department selection
       const { data: ticket, error: ticketError } = await supabase
         .from('tickets')
         .insert({
@@ -74,23 +80,7 @@ export default function CreateTicket() {
 
       if (ticketError) throw ticketError;
 
-      // Use AI routing if no department was manually selected
-      if (!departmentId) {
-        try {
-          await supabase.functions.invoke('ai-ticket-routing', {
-            body: {
-              ticketId: ticket.id,
-              title,
-              description
-            }
-          });
-        } catch (aiError) {
-          console.error('AI routing failed:', aiError);
-          // Continue even if AI routing fails
-        }
-      }
-
-      setSuccess('Ticket created successfully! Redirecting...');
+      setSuccess('Ticket created successfully! It will be automatically assigned to an available support agent. Redirecting...');
       setTimeout(() => {
         navigate('/tickets');
       }, 2000);
@@ -174,10 +164,10 @@ export default function CreateTicket() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="department">Department (Optional)</Label>
-                  <Select value={departmentId} onValueChange={setDepartmentId}>
+                  <Label htmlFor="department">Department *</Label>
+                  <Select value={departmentId} onValueChange={setDepartmentId} required>
                     <SelectTrigger>
-                      <SelectValue placeholder="AI will auto-route" />
+                      <SelectValue placeholder="Select a department" />
                     </SelectTrigger>
                     <SelectContent>
                       {departments.map((dept) => (
@@ -188,7 +178,7 @@ export default function CreateTicket() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-gray-500">
-                    Leave empty for AI-powered automatic routing
+                    Choose the department that best matches your issue
                   </p>
                 </div>
               </div>

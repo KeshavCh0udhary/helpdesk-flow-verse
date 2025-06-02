@@ -2,230 +2,299 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { MessageCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { MessageCircle, Send, Paperclip, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { CommentsList } from './comments/CommentsList';
-import { CommentForm } from './comments/CommentForm';
+import { AdvancedFileUpload } from './AdvancedFileUpload';
 
 interface Comment {
   id: string;
   content: string;
   created_at: string;
-  user: {
+  user_id: string;
+  user_profile?: {
     full_name: string;
     role: string;
   };
-  attachments: {
+  attachments?: Array<{
     id: string;
     file_name: string;
-    size_bytes: number;
     storage_path: string;
-  }[];
+    mime_type: string;
+    size_bytes: number;
+  }>;
 }
 
 interface EnhancedCommentsProps {
   ticketId: string;
+  disableNewComments?: boolean;
 }
 
-export const EnhancedComments = ({ ticketId }: EnhancedCommentsProps) => {
+export const EnhancedComments = ({ ticketId, disableNewComments = false }: EnhancedCommentsProps) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [attachments, setAttachments] = useState<File[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [showFileUpload, setShowFileUpload] = useState(false);
 
   useEffect(() => {
     fetchComments();
     
-    // Listen for response insertion events
-    const handleResponseInsert = (event: CustomEvent) => {
-      setNewComment(event.detail);
-    };
-    
-    window.addEventListener('insertResponse', handleResponseInsert as EventListener);
-    
+    // Set up real-time subscription for comments
+    const channel = supabase
+      .channel(`ticket-comments-${ticketId}`)
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'comments',
+        filter: `ticket_id=eq.${ticketId}`
+      }, () => {
+        fetchComments();
+      })
+      .subscribe();
+
     return () => {
-      window.removeEventListener('insertResponse', handleResponseInsert as EventListener);
+      supabase.removeChannel(channel);
     };
   }, [ticketId]);
 
   const fetchComments = async () => {
     try {
-      const { data, error } = await supabase
+      const { data: commentsData, error: commentsError } = await supabase
         .from('comments')
-        .select(`
-          id,
-          content,
-          created_at,
-          user_id,
-          attachments:attachments(
-            id,
-            file_name,
-            size_bytes,
-            storage_path
-          )
-        `)
+        .select('*')
         .eq('ticket_id', ticketId)
         .order('created_at', { ascending: true });
 
-      if (error) throw error;
+      if (commentsError) throw commentsError;
 
-      // Fetch user profiles
-      const userIds = data?.map(comment => comment.user_id) || [];
-      const { data: profiles } = await supabase
-        .from('profiles')
-        .select('id, full_name, role')
-        .in('id', userIds);
+      if (commentsData && commentsData.length > 0) {
+        // Get user profiles
+        const userIds = [...new Set(commentsData.map(comment => comment.user_id))];
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, full_name, role')
+          .in('id', userIds);
 
-      const profilesMap = profiles?.reduce((acc, profile) => {
-        acc[profile.id] = profile;
-        return acc;
-      }, {} as Record<string, { full_name: string; role: string }>) || {};
+        const profilesMap = (profilesData || []).reduce((acc, profile) => {
+          acc[profile.id] = profile;
+          return acc;
+        }, {} as Record<string, any>);
 
-      const commentsWithUsers = data?.map(comment => ({
-        ...comment,
-        user: profilesMap[comment.user_id] || { full_name: 'Unknown User', role: 'unknown' }
-      })) || [];
+        // Get attachments for all comments
+        const { data: attachmentsData } = await supabase
+          .from('attachments')
+          .select('*')
+          .in('comment_id', commentsData.map(c => c.id));
 
-      setComments(commentsWithUsers);
+        const attachmentsMap = (attachmentsData || []).reduce((acc, attachment) => {
+          if (!acc[attachment.comment_id!]) {
+            acc[attachment.comment_id!] = [];
+          }
+          acc[attachment.comment_id!].push(attachment);
+          return acc;
+        }, {} as Record<string, any[]>);
+
+        const commentsWithProfiles = commentsData.map(comment => ({
+          ...comment,
+          user_profile: profilesMap[comment.user_id] || { full_name: 'Unknown User', role: 'employee' },
+          attachments: attachmentsMap[comment.id] || []
+        }));
+
+        setComments(commentsWithProfiles);
+      }
     } catch (error) {
       console.error('Error fetching comments:', error);
-    }
-  };
-
-  const uploadFile = async (file: File, commentId: string): Promise<string> => {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${Math.random()}.${fileExt}`;
-    const filePath = `comments/${commentId}/${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('attachments')
-      .upload(filePath, file);
-
-    if (uploadError) throw uploadError;
-
-    // Save attachment record
-    const { error: attachmentError } = await supabase
-      .from('attachments')
-      .insert({
-        file_name: file.name,
-        storage_path: filePath,
-        size_bytes: file.size,
-        ticket_id: ticketId,
-        comment_id: commentId,
-        uploaded_by_user_id: user?.id
-      });
-
-    if (attachmentError) throw attachmentError;
-
-    return filePath;
-  };
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    setAttachments(prev => [...prev, ...files]);
-  };
-
-  const removeAttachment = (index: number) => {
-    setAttachments(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const submitComment = async () => {
-    if (!newComment.trim() && attachments.length === 0) return;
-
-    setLoading(true);
-    try {
-      // Create comment
-      const { data: comment, error: commentError } = await supabase
-        .from('comments')
-        .insert({
-          ticket_id: ticketId,
-          content: newComment.trim(),
-          user_id: user?.id
-        })
-        .select()
-        .single();
-
-      if (commentError) throw commentError;
-
-      // Upload attachments if any
-      if (attachments.length > 0) {
-        setUploading(true);
-        for (const file of attachments) {
-          await uploadFile(file, comment.id);
-        }
-        setUploading(false);
-      }
-
-      setNewComment('');
-      setAttachments([]);
-      await fetchComments();
-
-      toast({
-        title: "Success",
-        description: "Comment added successfully",
-      });
-    } catch (error) {
-      console.error('Error adding comment:', error);
       toast({
         title: "Error",
-        description: "Failed to add comment",
+        description: "Failed to load comments",
         variant: "destructive",
       });
     } finally {
       setLoading(false);
-      setUploading(false);
     }
   };
 
-  const formatFileSize = (bytes: number) => {
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    if (bytes === 0) return '0 Bytes';
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+  const handleSubmitComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !newComment.trim() || disableNewComments) return;
+
+    setSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from('comments')
+        .insert({
+          ticket_id: ticketId,
+          user_id: user.id,
+          content: newComment.trim()
+        });
+
+      if (error) throw error;
+
+      setNewComment('');
+      toast({
+        title: "Success",
+        description: "Comment added successfully",
+      });
+    } catch (error: any) {
+      console.error('Error adding comment:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to add comment",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const getRoleColor = (role: string) => {
+  const handleFileUpload = async (files: File[]) => {
+    // File upload logic would go here
+    // This is a placeholder for the file upload functionality
+    console.log('Files to upload:', files);
+    setShowFileUpload(false);
+  };
+
+  const getRoleBadgeColor = (role: string) => {
     switch (role) {
-      case 'admin': return 'text-red-600';
-      case 'support_agent': return 'text-blue-600';
-      case 'employee': return 'text-green-600';
-      default: return 'text-gray-600';
+      case 'admin': return 'bg-red-100 text-red-800';
+      case 'support_agent': return 'bg-blue-100 text-blue-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <MessageCircle className="h-5 w-5" />
-          Comments ({comments.length})
-        </CardTitle>
-        <CardDescription>
-          Communicate with team members about this ticket
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <CommentsList
-          comments={comments}
-          formatFileSize={formatFileSize}
-          getRoleColor={getRoleColor}
-        />
+    <div className="space-y-6">
+      {/* Comments List */}
+      <div className="space-y-4">
+        {comments.length === 0 ? (
+          <div className="text-center py-8">
+            <MessageCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No comments yet</h3>
+            <p className="text-gray-600">
+              {disableNewComments ? "This ticket has no comments." : "Be the first to add a comment"}
+            </p>
+          </div>
+        ) : (
+          comments.map((comment) => (
+            <Card key={comment.id} className="bg-gray-50">
+              <CardContent className="p-4">
+                <div className="flex items-start space-x-3">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback>
+                      {comment.user_profile?.full_name?.charAt(0) || 'U'}
+                    </AvatarFallback>
+                  </Avatar>
+                  
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center space-x-2 mb-1">
+                      <p className="text-sm font-medium text-gray-900">
+                        {comment.user_profile?.full_name || 'Unknown User'}
+                      </p>
+                      <Badge className={getRoleBadgeColor(comment.user_profile?.role || 'employee')}>
+                        {comment.user_profile?.role?.replace('_', ' ') || 'employee'}
+                      </Badge>
+                      <p className="text-xs text-gray-500">
+                        {new Date(comment.created_at).toLocaleString()}
+                      </p>
+                    </div>
+                    
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                      {comment.content}
+                    </p>
+                    
+                    {comment.attachments && comment.attachments.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {comment.attachments.map((attachment) => (
+                          <div key={attachment.id} className="text-xs text-blue-600 hover:text-blue-800">
+                            📎 {attachment.file_name}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))
+        )}
+      </div>
 
-        <CommentForm
-          newComment={newComment}
-          setNewComment={setNewComment}
-          attachments={attachments}
-          onFileSelect={handleFileSelect}
-          onRemoveAttachment={removeAttachment}
-          onSubmit={submitComment}
-          loading={loading}
-          uploading={uploading}
-        />
-      </CardContent>
-    </Card>
+      {/* Comment Form */}
+      {!disableNewComments && user && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Add Comment</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleSubmitComment} className="space-y-4">
+              <Textarea
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                placeholder="Write your comment..."
+                rows={3}
+                required
+              />
+              
+              <div className="flex items-center justify-between">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowFileUpload(!showFileUpload)}
+                >
+                  <Paperclip className="h-4 w-4 mr-2" />
+                  Attach Files
+                </Button>
+                
+                <Button type="submit" disabled={submitting || !newComment.trim()}>
+                  {submitting ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  ) : (
+                    <Send className="h-4 w-4 mr-2" />
+                  )}
+                  Post Comment
+                </Button>
+              </div>
+              
+              {showFileUpload && (
+                <div className="border-t pt-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-medium">Attach Files</h4>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setShowFileUpload(false)}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <AdvancedFileUpload
+                    onFilesSelected={handleFileUpload}
+                    maxFiles={5}
+                    maxSizePerFile={10 * 1024 * 1024} // 10MB
+                  />
+                </div>
+              )}
+            </form>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 };

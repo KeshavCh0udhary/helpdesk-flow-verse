@@ -517,6 +517,10 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: string
       }
+      get_least_loaded_agent_in_department: {
+        Args: { dept_id: string }
+        Returns: string
+      }
       get_next_agent_in_queue: {
         Args: { dept_id: string }
         Returns: string
