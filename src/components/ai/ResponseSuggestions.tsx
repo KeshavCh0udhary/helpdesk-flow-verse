@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Lightbulb, Copy, Check, AlertCircle, Database, RefreshCw, Sparkles } from 'lucide-react';
+import { Loader2, Lightbulb, Copy, Check, AlertCircle, Database, RefreshCw, Sparkles, MessageSquare } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 
