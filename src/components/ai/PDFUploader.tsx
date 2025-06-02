@@ -4,10 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Upload, FileText, CheckCircle, AlertCircle } from 'lucide-react';
+import { Loader2, Upload, FileText, CheckCircle, AlertCircle, Info } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/components/ui/use-toast';
 
 interface ProcessedChunk {
   title: string;
@@ -18,6 +19,7 @@ interface ProcessedChunk {
 
 export const PDFUploader = () => {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [uploading, setUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -30,11 +32,18 @@ export const PDFUploader = () => {
       'application/pdf': ['.pdf']
     },
     maxFiles: 1,
-    onDrop: (acceptedFiles) => {
+    maxSize: 10 * 1024 * 1024, // 10MB limit
+    onDrop: (acceptedFiles, rejectedFiles) => {
+      if (rejectedFiles.length > 0) {
+        setError('File rejected. Please ensure it\'s a PDF under 10MB.');
+        return;
+      }
+      
       if (acceptedFiles.length > 0) {
         setUploadedFile(acceptedFiles[0]);
         setError(null);
         setSuccess(false);
+        setProcessedChunks([]);
       }
     }
   });
@@ -46,6 +55,8 @@ export const PDFUploader = () => {
     setError(null);
 
     try {
+      console.log('Starting PDF processing...', uploadedFile.name);
+      
       // Create FormData to send the PDF file
       const formData = new FormData();
       formData.append('pdf', uploadedFile);
@@ -58,11 +69,25 @@ export const PDFUploader = () => {
 
       if (error) throw error;
 
-      setProcessedChunks(data.chunks || []);
-      setSuccess(true);
+      console.log('PDF processing result:', data);
+
+      if (data.chunks && data.chunks.length > 0) {
+        setProcessedChunks(data.chunks);
+        toast({
+          title: "PDF Processed Successfully",
+          description: `Extracted ${data.chunks.length} knowledge entries from your PDF.`,
+        });
+      } else {
+        setError('No content could be extracted from the PDF. Please ensure it contains readable text.');
+      }
     } catch (error) {
       console.error('Error processing PDF:', error);
       setError(error.message || 'Failed to process PDF');
+      toast({
+        title: "Processing Failed",
+        description: "Failed to extract content from PDF. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setProcessing(false);
     }
@@ -73,46 +98,83 @@ export const PDFUploader = () => {
 
     setUploading(true);
     try {
+      let successCount = 0;
+      let errorCount = 0;
+
       for (const chunk of processedChunks) {
-        // Insert the chunk into knowledge base
-        const { data: newEntry, error } = await supabase
-          .from('knowledge_base')
-          .insert({
-            title: chunk.title,
-            content: chunk.content,
-            category: chunk.category,
-            tags: chunk.tags,
-            created_by_user_id: user.id
-          })
-          .select()
-          .single();
+        try {
+          // Insert the chunk into knowledge base
+          const { data: newEntry, error } = await supabase
+            .from('knowledge_base')
+            .insert({
+              title: chunk.title,
+              content: chunk.content,
+              category: chunk.category,
+              tags: chunk.tags,
+              created_by_user_id: user.id
+            })
+            .select()
+            .single();
 
-        if (error) {
-          console.error('Error inserting chunk:', error);
-          continue;
-        }
+          if (error) {
+            console.error('Error inserting chunk:', error);
+            errorCount++;
+            continue;
+          }
 
-        // Generate embedding for the new entry
-        if (newEntry) {
-          await supabase.functions.invoke('generate-embeddings', {
-            body: {
-              text: `${chunk.title} ${chunk.content}`,
-              table: 'knowledge_base',
-              id: newEntry.id
-            }
-          });
+          // Generate embedding for the new entry
+          if (newEntry) {
+            await supabase.functions.invoke('generate-embeddings', {
+              body: {
+                text: `${chunk.title} ${chunk.content}`,
+                table: 'knowledge_base',
+                id: newEntry.id
+              }
+            });
+          }
+
+          successCount++;
+        } catch (chunkError) {
+          console.error('Error processing chunk:', chunkError);
+          errorCount++;
         }
       }
 
-      setSuccess(true);
-      setUploadedFile(null);
-      setProcessedChunks([]);
+      if (successCount > 0) {
+        setSuccess(true);
+        setUploadedFile(null);
+        setProcessedChunks([]);
+        toast({
+          title: "Added to Knowledge Base",
+          description: `Successfully added ${successCount} entries to the knowledge base.`,
+        });
+      }
+
+      if (errorCount > 0) {
+        toast({
+          title: "Partial Success",
+          description: `${successCount} entries added, ${errorCount} failed. Check console for details.`,
+          variant: "destructive",
+        });
+      }
     } catch (error) {
       console.error('Error adding to knowledge base:', error);
       setError('Failed to add content to knowledge base');
+      toast({
+        title: "Upload Failed",
+        description: "Failed to add content to knowledge base. Please try again.",
+        variant: "destructive",
+      });
     } finally {
       setUploading(false);
     }
+  };
+
+  const resetForm = () => {
+    setSuccess(false);
+    setUploadedFile(null);
+    setError(null);
+    setProcessedChunks([]);
   };
 
   if (success && processedChunks.length === 0) {
@@ -125,14 +187,7 @@ export const PDFUploader = () => {
             <p className="text-sm text-gray-600 mt-2">
               Content has been added to your knowledge base.
             </p>
-            <Button 
-              onClick={() => {
-                setSuccess(false);
-                setUploadedFile(null);
-                setError(null);
-              }} 
-              className="mt-4"
-            >
+            <Button onClick={resetForm} className="mt-4">
               Upload Another PDF
             </Button>
           </div>
@@ -153,6 +208,13 @@ export const PDFUploader = () => {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="flex items-center gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+          <Info className="h-4 w-4 text-blue-600" />
+          <span className="text-sm text-blue-700">
+            Supports Q&A formatted PDFs, FAQ documents, and general text content. Maximum file size: 10MB.
+          </span>
+        </div>
+
         {!uploadedFile && (
           <div
             {...getRootProps()}
@@ -170,6 +232,7 @@ export const PDFUploader = () => {
               <div>
                 <p className="text-lg font-medium">Drag & drop a PDF file here</p>
                 <p className="text-sm text-gray-600 mt-1">or click to select a file</p>
+                <p className="text-xs text-gray-500 mt-2">PDF files up to 10MB</p>
               </div>
             )}
           </div>
@@ -184,17 +247,25 @@ export const PDFUploader = () => {
                 ({(uploadedFile.size / 1024 / 1024).toFixed(2)} MB)
               </span>
             </div>
-            <Button onClick={processPDF} className="w-full">
-              <FileText className="h-4 w-4 mr-2" />
-              Process PDF
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={processPDF} className="flex-1">
+                <FileText className="h-4 w-4 mr-2" />
+                Extract Content
+              </Button>
+              <Button variant="outline" onClick={resetForm}>
+                Remove
+              </Button>
+            </div>
           </div>
         )}
 
         {processing && (
           <div className="flex items-center justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin mr-2" />
-            <span>Processing PDF and extracting content...</span>
+            <div className="text-center">
+              <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+              <p className="font-medium">Processing PDF...</p>
+              <p className="text-sm text-gray-600">Extracting questions and answers from your document</p>
+            </div>
           </div>
         )}
 
@@ -208,7 +279,9 @@ export const PDFUploader = () => {
         {processedChunks.length > 0 && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-medium">Extracted Content ({processedChunks.length} sections)</h3>
+              <h3 className="font-medium">
+                Extracted Content ({processedChunks.length} entries found)
+              </h3>
               <Button onClick={addToKnowledgeBase} disabled={uploading}>
                 {uploading ? (
                   <>
@@ -220,20 +293,33 @@ export const PDFUploader = () => {
                 )}
               </Button>
             </div>
-            <div className="max-h-64 overflow-y-auto space-y-2">
+            <div className="max-h-96 overflow-y-auto space-y-2 border rounded-lg p-4">
               {processedChunks.map((chunk, index) => (
                 <div key={index} className="p-3 bg-gray-50 rounded-lg">
-                  <h4 className="font-medium text-sm">{chunk.title}</h4>
-                  <p className="text-xs text-gray-600 mt-1 line-clamp-2">
-                    {chunk.content.substring(0, 150)}...
+                  <h4 className="font-medium text-sm mb-1">{chunk.title}</h4>
+                  <p className="text-xs text-gray-600 mb-2 line-clamp-2">
+                    {chunk.content.length > 150 
+                      ? chunk.content.substring(0, 150) + '...' 
+                      : chunk.content
+                    }
                   </p>
-                  <div className="flex gap-1 mt-2">
+                  <div className="flex gap-1 flex-wrap">
                     <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
                       {chunk.category}
                     </span>
+                    {chunk.tags.slice(0, 3).map((tag, tagIndex) => (
+                      <span key={tagIndex} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">
+                        {tag}
+                      </span>
+                    ))}
                   </div>
                 </div>
               ))}
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={resetForm} className="flex-1">
+                Cancel
+              </Button>
             </div>
           </div>
         )}
