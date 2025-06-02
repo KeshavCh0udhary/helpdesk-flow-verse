@@ -1,73 +1,32 @@
-# Welcome to your Lovable project
+# Helpdesk Flow Verse
 
-## Project info
+## Setup Instructions (How to run locally)
 
-**URL**: https://lovable.dev/projects/9aa9d6db-9185-44c9-bd2e-9ac3a1b01287
+1.  **Install Dependencies:** Make sure you have [Bun](https://bun.sh/docs/installation) installed. Then, run the following command in the project root:
 
-## How can I edit this code?
+    ```bash
+    bun install
+    ```
 
-There are several ways of editing your application.
+2.  **Run the Development Server:** After installing dependencies, start the development server:
 
-**Use Lovable**
+    ```bash
+    bun run dev
+    ```
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/9aa9d6db-9185-44c9-bd2e-9ac3a1b01287) and start prompting.
+    The application should be available at `http://localhost:8081/` (or another port if 8081 is in use).
 
-Changes made via Lovable will be committed automatically to this repo.
+## Live Deployed Link
 
-**Use your preferred IDE**
+The project is deployed on Vercel and can be accessed here:
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+[https://helpdesk-flow-verse-9o2k1ghjw-keshavch0udharys-projects.vercel.app](https://helpdesk-flow-verse-9o2k1ghjw-keshavch0udharys-projects.vercel.app)
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+## Overview of AI Features
 
-Follow these steps:
+Based on the project structure, the following AI-powered features appear to be implemented or are planned:
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/9aa9d6db-9185-44c9-bd2e-9ac3a1b01287) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+*   **AI Answer Bot:** Likely provides automated answers to common questions.
+*   **AI Pattern Detector:** May identify patterns in tickets or user interactions.
+*   **AI Response Suggestions:** Probably assists agents by suggesting responses to customer queries.
+*   **AI Ticket Routing:** Potentially automates the process of assigning tickets to the appropriate agents or departments.
