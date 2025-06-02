@@ -30,11 +30,12 @@ serve(async (req) => {
     // Extract text from PDF
     const extractedText = await extractTextFromPDF(arrayBuffer);
     console.log(`Extracted text length: ${extractedText.length} characters`);
+    console.log(`Extracted text preview: ${extractedText.substring(0, 1000)}...`);
     
     // Split content into logical chunks
     const chunks = await createKnowledgeChunks(extractedText);
 
-    console.log(`Extracted ${chunks.length} chunks from PDF`);
+    console.log(`Created ${chunks.length} chunks from PDF`);
 
     return new Response(
       JSON.stringify({ 
@@ -59,57 +60,119 @@ serve(async (req) => {
 
 async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
   try {
-    // Convert ArrayBuffer to Uint8Array for text extraction
     const uint8Array = new Uint8Array(arrayBuffer);
     
-    // Simple PDF text extraction - look for text between 'stream' and 'endstream'
-    // This is a basic implementation; in production, you'd use a proper PDF parser
+    // Convert to text using different encodings
     let text = '';
     
-    // Convert to string and look for text patterns
-    const pdfString = new TextDecoder('latin1').decode(uint8Array);
-    
-    // Extract text using regex patterns for PDF text objects
-    const textRegex = /BT\s*(.*?)\s*ET/gs;
-    const matches = pdfString.match(textRegex);
-    
-    if (matches) {
-      for (const match of matches) {
-        // Extract actual text from PDF text objects
-        const textLines = match.match(/\((.*?)\)/g);
-        if (textLines) {
-          for (const line of textLines) {
-            const cleanText = line.replace(/[()]/g, '');
-            if (cleanText.trim().length > 0) {
-              text += cleanText + '\n';
-            }
-          }
-        }
-      }
+    // Try UTF-8 first
+    try {
+      const utf8Text = new TextDecoder('utf-8').decode(uint8Array);
+      text = extractReadableText(utf8Text);
+    } catch (e) {
+      console.log('UTF-8 decoding failed, trying latin1');
     }
     
-    // Fallback: if no text extracted with the above method, try simpler approach
-    if (text.trim().length === 0) {
-      console.log('Primary extraction failed, trying fallback method...');
-      
-      // Look for readable text patterns in the PDF
-      const readableText = pdfString.match(/[A-Za-z0-9\s\?\.\,\!\:\;]+/g);
-      if (readableText) {
-        text = readableText
-          .filter(t => t.trim().length > 10) // Filter out short fragments
-          .join(' ')
-          .replace(/\s+/g, ' '); // Normalize whitespace
-      }
+    // Fallback to latin1 if UTF-8 fails
+    if (!text || text.length < 100) {
+      const latin1Text = new TextDecoder('latin1').decode(uint8Array);
+      text = extractReadableText(latin1Text);
     }
     
-    console.log(`Extracted text preview: ${text.substring(0, 500)}...`);
+    console.log(`Final extracted text length: ${text.length} characters`);
     return text;
     
   } catch (error) {
     console.error('Error extracting text from PDF:', error);
-    // Return empty string if extraction fails
     return '';
   }
+}
+
+function extractReadableText(pdfString: string): string {
+  let extractedText = '';
+  
+  // Method 1: Extract text from PDF text objects
+  const streamRegex = /stream\s*([\s\S]*?)\s*endstream/g;
+  let streamMatch;
+  
+  while ((streamMatch = streamRegex.exec(pdfString)) !== null) {
+    const streamContent = streamMatch[1];
+    
+    // Look for text commands in the stream
+    const textPatterns = [
+      /\((.*?)\)\s*Tj/g,  // Simple text showing
+      /\[(.*?)\]\s*TJ/g,  // Array text showing
+      /\((.*?)\)\s*'/g,   // Move and show text
+      /\((.*?)\)\s*"/g,   // Move, set spacing and show text
+    ];
+    
+    for (const pattern of textPatterns) {
+      let match;
+      while ((match = pattern.exec(streamContent)) !== null) {
+        const textContent = match[1]
+          .replace(/\\n/g, '\n')
+          .replace(/\\r/g, '\r')
+          .replace(/\\t/g, '\t')
+          .replace(/\\(.)/g, '$1'); // Remove escape characters
+        
+        if (textContent.trim().length > 0) {
+          extractedText += textContent + '\n';
+        }
+      }
+    }
+  }
+  
+  // Method 2: Extract from BT...ET blocks (text objects)
+  const textObjectRegex = /BT\s*([\s\S]*?)\s*ET/g;
+  let textMatch;
+  
+  while ((textMatch = textObjectRegex.exec(pdfString)) !== null) {
+    const textBlock = textMatch[1];
+    
+    // Extract text from parentheses
+    const textInParens = /\((.*?)\)/g;
+    let parenMatch;
+    
+    while ((parenMatch = textInParens.exec(textBlock)) !== null) {
+      const text = parenMatch[1]
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\r')
+        .replace(/\\t/g, '\t')
+        .replace(/\\(.)/g, '$1');
+      
+      if (text.trim().length > 0) {
+        extractedText += text + ' ';
+      }
+    }
+  }
+  
+  // Method 3: Look for readable text patterns
+  if (extractedText.length < 100) {
+    console.log('Trying alternative text extraction...');
+    
+    // Find text that looks like readable content
+    const readablePatterns = [
+      /[A-Za-z]{3,}[^<>]*[.?!]/g,  // Sentences
+      /\b\d+[\.\)]\s*[A-Za-z][^<>]*[.?!]/g,  // Numbered items
+      /Q\s*[:.]?\s*[A-Za-z][^<>]*[?]/g,  // Questions
+      /A\s*[:.]?\s*[A-Za-z][^<>]*[.!]/g,  // Answers
+    ];
+    
+    for (const pattern of readablePatterns) {
+      const matches = pdfString.match(pattern);
+      if (matches) {
+        extractedText += matches.join('\n') + '\n';
+      }
+    }
+  }
+  
+  // Clean up the extracted text
+  extractedText = extractedText
+    .replace(/\s+/g, ' ')  // Normalize whitespace
+    .replace(/([.!?])\s*([A-Z])/g, '$1\n$2')  // Add line breaks after sentences
+    .trim();
+  
+  return extractedText;
 }
 
 async function createKnowledgeChunks(text: string): Promise<Array<{
@@ -125,73 +188,108 @@ async function createKnowledgeChunks(text: string): Promise<Array<{
     return chunks;
   }
   
-  // Normalize the text
-  const normalizedText = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  console.log(`Processing text of length: ${text.length}`);
   
-  // Try multiple Q&A patterns to capture all questions
+  // Normalize the text
+  const normalizedText = text
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  // Enhanced Q&A patterns to capture all questions
   const patterns = [
-    // Pattern 1: Q: ... A: ...
-    /Q\s*:?\s*([^A]*?)A\s*:?\s*([^Q]*?)(?=Q\s*:?|$)/gi,
-    // Pattern 2: Question ... Answer ...
-    /Question\s*:?\s*([^A]*?)Answer\s*:?\s*([^Q]*?)(?=Question|$)/gi,
-    // Pattern 3: Numbered questions (1. ... 2. ...)
-    /(\d+)\.\s*([^0-9]*?)(?=\d+\.|$)/gi,
-    // Pattern 4: Lines ending with question marks
-    /([^.!?]*\?)\s*([^?]*?)(?=[^.!?]*\?|$)/gi
+    // Pattern 1: Numbered questions with Q: A: format
+    {
+      regex: /(\d+)[\.\)]\s*Q\s*[:.]?\s*([^A]*?)A\s*[:.]?\s*([^0-9Q]*?)(?=\d+[\.\)]|$)/gi,
+      type: 'numbered_qa'
+    },
+    // Pattern 2: Simple numbered questions
+    {
+      regex: /(\d+)[\.\)]\s*([^0-9]*?)(?=\d+[\.\)]|$)/gi,
+      type: 'numbered'
+    },
+    // Pattern 3: Q: ... A: ... format
+    {
+      regex: /Q\s*[:.]?\s*([^A]*?)A\s*[:.]?\s*([^Q]*?)(?=Q\s*[:.:]|$)/gi,
+      type: 'qa_format'
+    },
+    // Pattern 4: Question ... Answer ... format
+    {
+      regex: /Question\s*[:.]?\s*([^A]*?)Answer\s*[:.]?\s*([^Q]*?)(?=Question|$)/gi,
+      type: 'question_answer'
+    },
+    // Pattern 5: Lines ending with question marks
+    {
+      regex: /([^.!?]*\?)\s*([^?]*?)(?=[^.!?]*\?|$)/gi,
+      type: 'question_mark'
+    }
   ];
   
-  let foundQuestions = false;
+  let totalMatches = 0;
   
   for (const pattern of patterns) {
-    const matches = Array.from(normalizedText.matchAll(pattern));
+    const matches = Array.from(normalizedText.matchAll(pattern.regex));
+    console.log(`Pattern ${pattern.type}: found ${matches.length} matches`);
     
     if (matches.length > 0) {
-      console.log(`Found ${matches.length} matches with pattern ${pattern.source}`);
-      foundQuestions = true;
+      totalMatches += matches.length;
       
       for (const match of matches) {
         let question = '';
         let answer = '';
         
-        if (pattern.source.includes('\\d+')) {
-          // Numbered pattern
+        if (pattern.type === 'numbered_qa') {
           question = match[2]?.trim() || '';
-          answer = extractAnswerFromContext(normalizedText, question);
-        } else {
-          // Q&A patterns
+          answer = match[3]?.trim() || '';
+        } else if (pattern.type === 'numbered') {
+          const content = match[2]?.trim() || '';
+          // Try to split on common answer indicators
+          const answerSplit = content.split(/(?:Answer|A\s*[:.]|answer\s*[:.])/i);
+          if (answerSplit.length > 1) {
+            question = answerSplit[0].trim();
+            answer = answerSplit[1].trim();
+          } else {
+            // If no answer found, treat as question with unknown answer
+            question = content;
+            answer = 'Please refer to the original document for the complete answer.';
+          }
+        } else if (pattern.type === 'qa_format' || pattern.type === 'question_answer') {
           question = match[1]?.trim() || '';
           answer = match[2]?.trim() || '';
+        } else if (pattern.type === 'question_mark') {
+          question = match[1]?.trim() || '';
+          answer = match[2]?.trim() || 'Please refer to the original document for the answer.';
         }
         
-        if (question.length > 10 && answer.length > 5) {
-          // Clean up the question and answer
-          question = cleanText(question);
-          answer = cleanText(answer);
-          
-          // Determine category based on keywords
+        // Clean up question and answer
+        question = cleanText(question);
+        answer = cleanText(answer);
+        
+        // Only add if we have meaningful content
+        if (question.length > 10) {
           const category = determineCategory(question + ' ' + answer);
-          
-          // Extract tags from question and answer content
           const tags = extractTags(question + ' ' + answer);
           
           chunks.push({
             title: question.length > 100 ? question.substring(0, 97) + '...' : question,
-            content: answer,
+            content: answer || 'Please refer to the original document for the answer.',
             category,
             tags
           });
         }
       }
       
-      // If we found good matches with this pattern, use them
-      if (chunks.length > 0) {
+      // If we found good matches with this pattern, prefer it over others
+      if (chunks.length > totalMatches * 0.8) {
+        console.log(`Using pattern ${pattern.type} as primary extraction method`);
         break;
       }
     }
   }
   
-  // Fallback: if no Q&A patterns found, split by paragraphs and treat as content blocks
-  if (!foundQuestions && chunks.length === 0) {
+  // Fallback: if no Q&A patterns found, split by paragraphs
+  if (chunks.length === 0) {
     console.log('No Q&A patterns found, splitting by paragraphs...');
     
     const paragraphs = normalizedText
@@ -205,7 +303,7 @@ async function createKnowledgeChunks(text: string): Promise<Array<{
         const tags = extractTags(paragraph);
         
         chunks.push({
-          title: paragraph.substring(0, 100) + (paragraph.length > 100 ? '...' : ''),
+          title: `Section ${i + 1}: ${paragraph.substring(0, 80)}${paragraph.length > 80 ? '...' : ''}`,
           content: paragraph,
           category,
           tags
@@ -214,29 +312,16 @@ async function createKnowledgeChunks(text: string): Promise<Array<{
     }
   }
   
-  console.log(`Created ${chunks.length} chunks from extracted text`);
+  console.log(`Final result: Created ${chunks.length} chunks from extracted text`);
   return chunks;
 }
 
-function extractAnswerFromContext(text: string, question: string): string {
-  // Find the question in the text and extract following content as answer
-  const questionIndex = text.toLowerCase().indexOf(question.toLowerCase());
-  if (questionIndex === -1) return '';
-  
-  const afterQuestion = text.substring(questionIndex + question.length);
-  const nextQuestionMatch = afterQuestion.match(/\d+\./);
-  
-  if (nextQuestionMatch) {
-    return afterQuestion.substring(0, nextQuestionMatch.index).trim();
-  }
-  
-  return afterQuestion.substring(0, 500).trim(); // Limit to reasonable length
-}
-
 function cleanText(text: string): string {
+  if (!text) return '';
+  
   return text
-    .replace(/\s+/g, ' ') // Normalize whitespace
-    .replace(/[^\w\s\?\.\,\!\:\;\-\(\)]/g, '') // Remove special characters
+    .replace(/\s+/g, ' ')
+    .replace(/[^\w\s\?\.\,\!\:\;\-\(\)'"]/g, '')
     .trim();
 }
 
