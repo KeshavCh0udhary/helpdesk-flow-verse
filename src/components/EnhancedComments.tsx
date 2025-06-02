@@ -1,14 +1,13 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { MessageCircle, Send, Paperclip, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { AdvancedFileUpload } from './AdvancedFileUpload';
+import { CommentsList } from './comments/CommentsList';
 
 interface Comment {
   id: string;
@@ -41,6 +40,11 @@ export const EnhancedComments = ({ ticketId, disableNewComments = false }: Enhan
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [showFileUpload, setShowFileUpload] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   useEffect(() => {
     fetchComments();
@@ -62,6 +66,10 @@ export const EnhancedComments = ({ ticketId, disableNewComments = false }: Enhan
       supabase.removeChannel(channel);
     };
   }, [ticketId]);
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [comments]);
 
   const fetchComments = async () => {
     try {
@@ -170,6 +178,26 @@ export const EnhancedComments = ({ ticketId, disableNewComments = false }: Enhan
     }
   };
 
+  const formatFileSize = (bytes: number) => {
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    if (bytes === 0) return '0 Bytes';
+    const i = Math.floor(Math.log(bytes) / Math.log(1024));
+    return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
+  };
+
+  // Transform comments for the new component structure
+  const transformedComments = comments.map(comment => ({
+    id: comment.id,
+    content: comment.content,
+    created_at: comment.created_at,
+    user: {
+      id: comment.user_id,
+      full_name: comment.user_profile?.full_name || 'Unknown User',
+      role: comment.user_profile?.role || 'employee'
+    },
+    attachments: comment.attachments || []
+  }));
+
   if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
@@ -181,7 +209,7 @@ export const EnhancedComments = ({ ticketId, disableNewComments = false }: Enhan
   return (
     <div className="space-y-6">
       {/* Comments List */}
-      <div className="space-y-4">
+      <div className="min-h-[400px]">
         {comments.length === 0 ? (
           <div className="text-center py-8">
             <MessageCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -191,47 +219,15 @@ export const EnhancedComments = ({ ticketId, disableNewComments = false }: Enhan
             </p>
           </div>
         ) : (
-          comments.map((comment) => (
-            <Card key={comment.id} className="bg-gray-50">
-              <CardContent className="p-4">
-                <div className="flex items-start space-x-3">
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback>
-                      {comment.user_profile?.full_name?.charAt(0) || 'U'}
-                    </AvatarFallback>
-                  </Avatar>
-                  
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <p className="text-sm font-medium text-gray-900">
-                        {comment.user_profile?.full_name || 'Unknown User'}
-                      </p>
-                      <Badge className={getRoleBadgeColor(comment.user_profile?.role || 'employee')}>
-                        {comment.user_profile?.role?.replace('_', ' ') || 'employee'}
-                      </Badge>
-                      <p className="text-xs text-gray-500">
-                        {new Date(comment.created_at).toLocaleString()}
-                      </p>
-                    </div>
-                    
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                      {comment.content}
-                    </p>
-                    
-                    {comment.attachments && comment.attachments.length > 0 && (
-                      <div className="mt-2 space-y-1">
-                        {comment.attachments.map((attachment) => (
-                          <div key={attachment.id} className="text-xs text-blue-600 hover:text-blue-800">
-                            📎 {attachment.file_name}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))
+          <>
+            <CommentsList 
+              comments={transformedComments}
+              formatFileSize={formatFileSize}
+              getRoleColor={getRoleBadgeColor}
+              currentUserId={user?.id}
+            />
+            <div ref={messagesEndRef} />
+          </>
         )}
       </div>
 

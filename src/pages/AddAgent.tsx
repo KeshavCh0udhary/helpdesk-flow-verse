@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { UserPlus, Users, Trash2 } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
+import { UserPlus, Users, Trash2, Eye, EyeOff } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Link } from 'react-router-dom';
 
@@ -31,6 +32,10 @@ export default function AddAgent() {
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState('');
+  const [useCustomPassword, setUseCustomPassword] = useState(false);
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -76,26 +81,58 @@ export default function AddAgent() {
     }
   };
 
+  const validatePasswords = () => {
+    if (useCustomPassword) {
+      if (!password || password.length < 6) {
+        toast({
+          title: "Error",
+          description: "Password must be at least 6 characters long",
+          variant: "destructive",
+        });
+        return false;
+      }
+      if (password !== confirmPassword) {
+        toast({
+          title: "Error",
+          description: "Passwords do not match",
+          variant: "destructive",
+        });
+        return false;
+      }
+    }
+    return true;
+  };
+
   const handleAddAgent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !fullName || !selectedDepartment) {
       toast({
         title: "Error",
-        description: "Please fill in all fields",
+        description: "Please fill in all required fields",
         variant: "destructive",
       });
       return;
     }
 
+    if (!validatePasswords()) return;
+
     setSubmitting(true);
     try {
-      console.log('Calling create-agent function with:', { email, fullName, departmentId: selectedDepartment });
+      console.log('Calling create-agent function with:', { 
+        email, 
+        fullName, 
+        departmentId: selectedDepartment,
+        useCustomPassword,
+        password: useCustomPassword ? password : undefined
+      });
 
       const { data, error } = await supabase.functions.invoke('create-agent', {
         body: {
           email,
           fullName,
           departmentId: selectedDepartment,
+          useCustomPassword,
+          password: useCustomPassword ? password : undefined,
         },
       });
 
@@ -110,14 +147,21 @@ export default function AddAgent() {
         throw new Error(data.error);
       }
 
+      const successMessage = useCustomPassword 
+        ? "Support agent added successfully with custom password!"
+        : "Support agent added successfully! They will receive an email with instructions to set up their password.";
+
       toast({
         title: "Success",
-        description: "Support agent added successfully! They will receive an email with instructions to set up their password.",
+        description: successMessage,
       });
 
       setEmail('');
       setFullName('');
       setSelectedDepartment('');
+      setPassword('');
+      setConfirmPassword('');
+      setUseCustomPassword(false);
       fetchAgents();
     } catch (error: any) {
       console.error('Error adding agent:', error);
@@ -243,6 +287,57 @@ export default function AddAgent() {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="flex items-center space-x-2">
+                <Checkbox 
+                  id="useCustomPassword"
+                  checked={useCustomPassword}
+                  onCheckedChange={(checked) => setUseCustomPassword(checked as boolean)}
+                />
+                <Label htmlFor="useCustomPassword" className="text-sm">
+                  Set custom password (instead of sending setup email)
+                </Label>
+              </div>
+
+              {useCustomPassword && (
+                <>
+                  <div>
+                    <Label htmlFor="password">Password</Label>
+                    <div className="relative">
+                      <Input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Enter password (min 6 characters)"
+                        required={useCustomPassword}
+                        minLength={6}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="absolute right-1 top-1/2 transform -translate-y-1/2"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="confirmPassword">Confirm Password</Label>
+                    <Input
+                      id="confirmPassword"
+                      type={showPassword ? "text" : "password"}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      placeholder="Confirm password"
+                      required={useCustomPassword}
+                    />
+                  </div>
+                </>
+              )}
 
               <Button type="submit" disabled={submitting} className="w-full">
                 {submitting ? 'Adding...' : 'Add Agent'}

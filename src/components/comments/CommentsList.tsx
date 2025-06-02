@@ -23,17 +23,20 @@ interface CommentsListProps {
   comments: Comment[];
   formatFileSize: (bytes: number) => string;
   getRoleColor: (role: string) => string;
+  currentUserId?: string;
 }
 
-export const CommentsList = ({ comments, formatFileSize, getRoleColor }: CommentsListProps) => {
+export const CommentsList = ({ comments, formatFileSize, getRoleColor, currentUserId }: CommentsListProps) => {
   return (
-    <div className="space-y-4 max-h-96 overflow-y-auto">
+    <div className="space-y-2 max-h-96 overflow-y-auto p-2 bg-gray-50 rounded-lg">
       {comments.map((comment) => (
         <CommentItem
           key={comment.id}
           comment={comment}
           formatFileSize={formatFileSize}
           getRoleColor={getRoleColor}
+          isOwnMessage={comment.user.id === currentUserId}
+          currentUserId={currentUserId}
         />
       ))}
     </div>

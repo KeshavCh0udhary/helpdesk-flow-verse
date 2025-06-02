@@ -71,7 +71,7 @@ serve(async (req) => {
     }
 
     // Get request body
-    const { email, fullName, departmentId } = await req.json()
+    const { email, fullName, departmentId, useCustomPassword, password } = await req.json()
 
     if (!email || !fullName || !departmentId) {
       return new Response(
@@ -83,12 +83,25 @@ serve(async (req) => {
       )
     }
 
-    console.log('Creating agent:', { email, fullName, departmentId })
+    // Validate password if custom password is being used
+    if (useCustomPassword && (!password || password.length < 6)) {
+      return new Response(
+        JSON.stringify({ error: 'Password must be at least 6 characters long' }),
+        { 
+          status: 400, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      )
+    }
 
-    // Create user using admin client with a secure random password they'll never use
+    console.log('Creating agent:', { email, fullName, departmentId, useCustomPassword })
+
+    // Create user using admin client
+    const userPassword = useCustomPassword ? password : crypto.randomUUID() + crypto.randomUUID()
+    
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
-      password: crypto.randomUUID() + crypto.randomUUID(), // Secure random password
+      password: userPassword,
       email_confirm: true,
       user_metadata: {
         full_name: fullName,
@@ -139,40 +152,42 @@ serve(async (req) => {
       )
     }
 
-    // Generate password reset link for the new agent
-    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-      type: 'recovery',
-      email: email,
-      options: {
-        redirectTo: `${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.supabase.co')}/auth/v1/verify?redirect_to=${encodeURIComponent(new URL(req.url).origin + '/login')}`
+    // If not using custom password, generate password reset link and send email
+    if (!useCustomPassword) {
+      const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'recovery',
+        email: email,
+        options: {
+          redirectTo: `${Deno.env.get('SUPABASE_URL')?.replace('.supabase.co', '.supabase.co')}/auth/v1/verify?redirect_to=${encodeURIComponent(new URL(req.url).origin + '/login')}`
+        }
+      })
+
+      if (linkError) {
+        console.error('Link generation error:', linkError)
+        // Don't fail the entire operation, but log the error
+        console.log('Agent created but password link failed to generate')
       }
-    })
 
-    if (linkError) {
-      console.error('Link generation error:', linkError)
-      // Don't fail the entire operation, but log the error
-      console.log('Agent created but password link failed to generate')
-    }
+      // Send welcome email with password creation link
+      if (linkData?.properties?.action_link) {
+        try {
+          const { error: notificationError } = await supabase.functions.invoke('send-notification', {
+            body: {
+              type: 'agent_created',
+              recipientEmail: email,
+              recipientName: fullName,
+              passwordResetLink: linkData.properties.action_link,
+            },
+          })
 
-    // Send welcome email with password creation link
-    if (linkData?.properties?.action_link) {
-      try {
-        const { error: notificationError } = await supabase.functions.invoke('send-notification', {
-          body: {
-            type: 'agent_created',
-            recipientEmail: email,
-            recipientName: fullName,
-            passwordResetLink: linkData.properties.action_link,
-          },
-        })
-
-        if (notificationError) {
-          console.error('Notification error:', notificationError)
+          if (notificationError) {
+            console.error('Notification error:', notificationError)
+            // Don't fail the operation, just log
+          }
+        } catch (emailError) {
+          console.error('Email sending error:', emailError)
           // Don't fail the operation, just log
         }
-      } catch (emailError) {
-        console.error('Email sending error:', emailError)
-        // Don't fail the operation, just log
       }
     }
 
@@ -185,7 +200,8 @@ serve(async (req) => {
           id: authData.user.id,
           email: authData.user.email,
           full_name: fullName
-        }
+        },
+        method: useCustomPassword ? 'custom_password' : 'email_setup'
       }),
       { 
         status: 200, 
