@@ -557,6 +557,10 @@ export type Database = {
         Args: { "": unknown }
         Returns: unknown
       }
+      increment_kb_usage_count: {
+        Args: { row_id: string }
+        Returns: undefined
+      }
       ivfflat_bit_support: {
         Args: { "": unknown }
         Returns: unknown
