@@ -1,3 +1,4 @@
+
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -26,15 +27,22 @@ serve(async (req) => {
     const arrayBuffer = await pdfFile.arrayBuffer();
     console.log(`PDF file size: ${arrayBuffer.byteLength} bytes`);
 
-    // Extract text from PDF using proper PDF parsing
+    // Extract text from PDF using improved parsing
     const extractedText = await extractTextFromPDF(arrayBuffer);
     console.log(`Extracted text length: ${extractedText.length} characters`);
-    console.log(`Extracted text preview: ${extractedText.substring(0, 500)}...`);
+    
+    if (extractedText.length < 10) {
+      throw new Error('Unable to extract meaningful text from PDF. Please ensure the PDF contains readable text.');
+    }
     
     // Split content into logical chunks
     const chunks = await createKnowledgeChunks(extractedText);
 
     console.log(`Created ${chunks.length} chunks from PDF`);
+
+    if (chunks.length === 0) {
+      throw new Error('No knowledge chunks could be created from the PDF content.');
+    }
 
     return new Response(
       JSON.stringify({ 
@@ -48,7 +56,10 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error processing PDF:', error);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error.message || 'Failed to process PDF',
+        details: 'Please ensure the PDF contains readable text and is not corrupted.'
+      }),
       { 
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -58,36 +69,72 @@ serve(async (req) => {
 });
 
 async function extractTextFromPDF(arrayBuffer: ArrayBuffer): Promise<string> {
+  console.log('Starting PDF text extraction...');
+  
   try {
-    const uint8Array = new Uint8Array(arrayBuffer);
-    const pdfString = new TextDecoder('latin1').decode(uint8Array);
-    
-    console.log('Starting proper PDF text extraction...');
-    
-    // Extract all PDF objects first
-    const objects = extractPDFObjects(pdfString);
-    console.log(`Found ${objects.length} PDF objects`);
-    
-    // Find and extract text from content streams
-    let extractedText = '';
-    for (const obj of objects) {
-      const text = await extractTextFromObject(obj, pdfString);
-      if (text.trim()) {
-        extractedText += text + '\n';
+    // Primary extraction method: Enhanced PDF parsing
+    const primaryText = await enhancedPDFExtraction(arrayBuffer);
+    if (primaryText && primaryText.length > 50) {
+      console.log('Primary extraction successful');
+      return primaryText;
+    }
+  } catch (error) {
+    console.log('Primary extraction failed:', error.message);
+  }
+
+  try {
+    // Secondary extraction method: Pattern-based extraction
+    const secondaryText = await patternBasedExtraction(arrayBuffer);
+    if (secondaryText && secondaryText.length > 20) {
+      console.log('Secondary extraction successful');
+      return secondaryText;
+    }
+  } catch (error) {
+    console.log('Secondary extraction failed:', error.message);
+  }
+
+  try {
+    // Tertiary extraction method: Simple text search
+    const fallbackText = await simpleFallbackExtraction(arrayBuffer);
+    if (fallbackText && fallbackText.length > 10) {
+      console.log('Fallback extraction successful');
+      return fallbackText;
+    }
+  } catch (error) {
+    console.log('Fallback extraction failed:', error.message);
+  }
+
+  throw new Error('Unable to extract text from PDF using any method');
+}
+
+async function enhancedPDFExtraction(arrayBuffer: ArrayBuffer): Promise<string> {
+  const uint8Array = new Uint8Array(arrayBuffer);
+  const pdfString = new TextDecoder('latin1').decode(uint8Array);
+  
+  console.log('Enhanced PDF extraction starting...');
+  
+  // Find all PDF objects
+  const objects = extractPDFObjects(pdfString);
+  console.log(`Found ${objects.length} PDF objects`);
+  
+  let extractedText = '';
+  
+  // Process each object that might contain text
+  for (const obj of objects) {
+    if (obj.type === 'stream' || obj.content.includes('stream')) {
+      try {
+        const text = await extractTextFromPDFObject(obj, uint8Array);
+        if (text.trim()) {
+          extractedText += text + ' ';
+        }
+      } catch (error) {
+        console.log(`Failed to extract text from object ${obj.id}:`, error.message);
+        continue;
       }
     }
-    
-    // Clean up the extracted text
-    extractedText = cleanExtractedText(extractedText);
-    
-    console.log(`Final extracted text length: ${extractedText.length} characters`);
-    return extractedText;
-    
-  } catch (error) {
-    console.error('Error in PDF text extraction:', error);
-    // Fallback to basic extraction if advanced parsing fails
-    return fallbackTextExtraction(arrayBuffer);
   }
+  
+  return cleanExtractedText(extractedText);
 }
 
 function extractPDFObjects(pdfString: string): Array<{id: string, content: string, type: string}> {
@@ -121,49 +168,61 @@ function extractPDFObjects(pdfString: string): Array<{id: string, content: strin
   return objects;
 }
 
-async function extractTextFromObject(obj: any, pdfString: string): Promise<string> {
-  if (obj.type !== 'stream' && obj.type !== 'page') {
-    return '';
-  }
-  
-  // Look for stream content
+async function extractTextFromPDFObject(obj: any, pdfBytes: Uint8Array): Promise<string> {
+  // Look for stream content boundaries
   const streamMatch = obj.content.match(/stream\s*([\s\S]*?)\s*endstream/);
   if (!streamMatch) {
     return '';
   }
+
+  // Get the position of the stream in the original binary data
+  const streamStartMarker = 'stream';
+  const streamEndMarker = 'endstream';
   
-  let streamData = streamMatch[1];
+  const pdfString = new TextDecoder('latin1').decode(pdfBytes);
+  const objStart = pdfString.indexOf(obj.content);
+  if (objStart === -1) return '';
   
-  // Check for FlateDecode filter (most common compression)
+  const streamStart = pdfString.indexOf(streamStartMarker, objStart) + streamStartMarker.length;
+  const streamEnd = pdfString.indexOf(streamEndMarker, streamStart);
+  
+  if (streamStart === -1 || streamEnd === -1) return '';
+  
+  // Extract raw stream bytes
+  const streamBytes = pdfBytes.slice(streamStart, streamEnd);
+  
+  // Try to decompress if needed
+  let streamContent: string;
   if (obj.content.includes('/FlateDecode') || obj.content.includes('/Fl')) {
     try {
-      streamData = await decompressFlateDecode(streamData);
-    } catch (e) {
-      console.log('Failed to decompress stream, trying raw extraction');
+      streamContent = await decompressStream(streamBytes);
+    } catch (error) {
+      console.log('Decompression failed, using raw content');
+      streamContent = new TextDecoder('latin1').decode(streamBytes);
     }
+  } else {
+    streamContent = new TextDecoder('latin1').decode(streamBytes);
   }
   
-  // Extract text from the (possibly decompressed) stream
-  return extractTextFromStream(streamData);
+  // Extract text from the stream content
+  return extractTextFromStreamContent(streamContent);
 }
 
-async function decompressFlateDecode(compressedData: string): Promise<string> {
+async function decompressStream(streamBytes: Uint8Array): Promise<string> {
   try {
-    // Convert the compressed string to Uint8Array
-    const bytes = new Uint8Array(compressedData.length);
-    for (let i = 0; i < compressedData.length; i++) {
-      bytes[i] = compressedData.charCodeAt(i);
-    }
+    // Create a readable stream from the bytes
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(streamBytes);
+        controller.close();
+      }
+    });
     
-    // Use native compression API (zlib/deflate)
-    const decompressed = new DecompressionStream('deflate');
-    const writer = decompressed.writable.getWriter();
-    const reader = decompressed.readable.getReader();
+    // Decompress using the DecompressionStream
+    const decompressed = stream.pipeThrough(new DecompressionStream('deflate'));
+    const reader = decompressed.getReader();
     
-    writer.write(bytes);
-    writer.close();
-    
-    const chunks = [];
+    const chunks: Uint8Array[] = [];
     let done = false;
     
     while (!done) {
@@ -174,7 +233,7 @@ async function decompressFlateDecode(compressedData: string): Promise<string> {
       }
     }
     
-    // Combine all chunks
+    // Combine chunks
     const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
     const result = new Uint8Array(totalLength);
     let offset = 0;
@@ -186,30 +245,29 @@ async function decompressFlateDecode(compressedData: string): Promise<string> {
     
     return new TextDecoder('latin1').decode(result);
   } catch (error) {
-    console.error('Decompression failed:', error);
-    throw error;
+    throw new Error(`Decompression failed: ${error.message}`);
   }
 }
 
-function extractTextFromStream(streamContent: string): string {
+function extractTextFromStreamContent(streamContent: string): string {
   let text = '';
   
-  // PDF text operators to look for
+  // PDF text operators
   const textOperators = [
     /\((.*?)\)\s*Tj/g,           // Show text
-    /\[(.*?)\]\s*TJ/g,           // Show text with individual glyph positioning
-    /\((.*?)\)\s*'/g,            // Move to next line and show text
-    /\((.*?)\)\s*"/g,            // Set word and character spacing, move to next line and show text
+    /\[(.*?)\]\s*TJ/g,           // Show text with positioning
+    /\((.*?)\)\s*'/g,            // Move and show text
+    /\((.*?)\)\s*"/g,            // Set spacing and show text
   ];
   
   for (const operator of textOperators) {
-    let match;
     operator.lastIndex = 0; // Reset regex
+    let match;
     
     while ((match = operator.exec(streamContent)) !== null) {
       let textContent = match[1];
       
-      // Handle escape sequences - FIXED REGEX PATTERNS
+      // Handle escape sequences
       textContent = textContent
         .replace(/\\n/g, '\n')
         .replace(/\\r/g, '\r')
@@ -227,22 +285,16 @@ function extractTextFromStream(streamContent: string): string {
     }
   }
   
-  // Look for text between BT (Begin Text) and ET (End Text) operators
+  // Also look for text between BT/ET operators
   const btEtRegex = /BT\s*([\s\S]*?)\s*ET/g;
   let btMatch;
   
   while ((btMatch = btEtRegex.exec(streamContent)) !== null) {
     const textBlock = btMatch[1];
     
-    // Extract text from this block
-    const blockTextOperators = [
-      /\((.*?)\)\s*Tj/g,
-      /\[(.*?)\]\s*TJ/g,
-    ];
-    
-    for (const operator of blockTextOperators) {
-      let match;
+    for (const operator of textOperators) {
       operator.lastIndex = 0;
+      let match;
       
       while ((match = operator.exec(textBlock)) !== null) {
         let textContent = match[1];
@@ -262,29 +314,22 @@ function extractTextFromStream(streamContent: string): string {
   return text;
 }
 
-function cleanExtractedText(text: string): string {
-  return text
-    .replace(/\s+/g, ' ')                    // Normalize whitespace
-    .replace(/([.!?])\s*([A-Z])/g, '$1\n$2') // Add line breaks after sentences
-    .replace(/(\d+\.)\s*([A-Z])/g, '$1\n$2') // Add line breaks after numbered items
-    .trim();
-}
-
-function fallbackTextExtraction(arrayBuffer: ArrayBuffer): string {
-  console.log('Using fallback text extraction method...');
+async function patternBasedExtraction(arrayBuffer: ArrayBuffer): Promise<string> {
+  console.log('Using pattern-based extraction...');
   
   const uint8Array = new Uint8Array(arrayBuffer);
   const pdfString = new TextDecoder('latin1').decode(uint8Array);
   
-  // Simple pattern matching as fallback
   const patterns = [
     /\((.*?)\)\s*Tj/g,
     /\((.*?)\)\s*'/g,
     /\[(.*?)\]\s*TJ/g,
+    /\/T1_\d+\s+\d+\s+Tf\s*\((.*?)\)/g,
   ];
   
   let text = '';
   for (const pattern of patterns) {
+    pattern.lastIndex = 0;
     let match;
     while ((match = pattern.exec(pdfString)) !== null) {
       const content = match[1]
@@ -298,7 +343,39 @@ function fallbackTextExtraction(arrayBuffer: ArrayBuffer): string {
     }
   }
   
-  return text.replace(/\s+/g, ' ').trim();
+  return cleanExtractedText(text);
+}
+
+async function simpleFallbackExtraction(arrayBuffer: ArrayBuffer): Promise<string> {
+  console.log('Using simple fallback extraction...');
+  
+  const uint8Array = new Uint8Array(arrayBuffer);
+  const pdfString = new TextDecoder('latin1').decode(uint8Array);
+  
+  // Very simple pattern matching
+  const simplePattern = /\(([^)]+)\)/g;
+  let text = '';
+  let match;
+  
+  while ((match = simplePattern.exec(pdfString)) !== null) {
+    const content = match[1];
+    if (content.length > 3 && /[a-zA-Z]/.test(content)) {
+      text += content + ' ';
+    }
+  }
+  
+  return cleanExtractedText(text);
+}
+
+function cleanExtractedText(text: string): string {
+  if (!text) return '';
+  
+  return text
+    .replace(/\s+/g, ' ')                    // Normalize whitespace
+    .replace(/([.!?])\s*([A-Z])/g, '$1\n$2') // Add line breaks after sentences
+    .replace(/(\d+\.)\s*([A-Z])/g, '$1\n$2') // Add line breaks after numbered items
+    .replace(/[^\w\s\?\.\,\!\:\;\-\(\)'"]/g, '') // Remove non-printable characters
+    .trim();
 }
 
 async function createKnowledgeChunks(text: string): Promise<Array<{
@@ -323,44 +400,35 @@ async function createKnowledgeChunks(text: string): Promise<Array<{
     .replace(/\s+/g, ' ')
     .trim();
   
-  // Enhanced Q&A patterns to capture all questions
+  // Enhanced Q&A patterns
   const patterns = [
-    // Pattern 1: Numbered questions with Q: A: format
     {
       regex: /(\d+)[\.\)]\s*Q\s*[:.]?\s*([^A]*?)A\s*[:.]?\s*([^0-9Q]*?)(?=\d+[\.\)]|$)/gi,
       type: 'numbered_qa'
     },
-    // Pattern 2: Simple numbered questions
     {
       regex: /(\d+)[\.\)]\s*([^0-9]*?)(?=\d+[\.\)]|$)/gi,
       type: 'numbered'
     },
-    // Pattern 3: Q: ... A: ... format
     {
-      regex: /Q\s*[:.]?\s*([^A]*?)A\s*[:.]?\s*([^Q]*?)(?=Q\s*[:.:]|$)/gi,
+      regex: /Q\s*[:.]?\s*([^A]*?)A\s*[:.]?\s*([^Q]*?)(?=Q\s*[:.]|$)/gi,
       type: 'qa_format'
     },
-    // Pattern 4: Question ... Answer ... format
     {
       regex: /Question\s*[:.]?\s*([^A]*?)Answer\s*[:.]?\s*([^Q]*?)(?=Question|$)/gi,
       type: 'question_answer'
     },
-    // Pattern 5: Lines ending with question marks
     {
       regex: /([^.!?]*\?)\s*([^?]*?)(?=[^.!?]*\?|$)/gi,
       type: 'question_mark'
     }
   ];
   
-  let totalMatches = 0;
-  
   for (const pattern of patterns) {
     const matches = Array.from(normalizedText.matchAll(pattern.regex));
     console.log(`Pattern ${pattern.type}: found ${matches.length} matches`);
     
     if (matches.length > 0) {
-      totalMatches += matches.length;
-      
       for (const match of matches) {
         let question = '';
         let answer = '';
@@ -370,13 +438,11 @@ async function createKnowledgeChunks(text: string): Promise<Array<{
           answer = match[3]?.trim() || '';
         } else if (pattern.type === 'numbered') {
           const content = match[2]?.trim() || '';
-          // Try to split on common answer indicators
           const answerSplit = content.split(/(?:Answer|A\s*[:.]|answer\s*[:.])/i);
           if (answerSplit.length > 1) {
             question = answerSplit[0].trim();
             answer = answerSplit[1].trim();
           } else {
-            // If no answer found, treat as question with unknown answer
             question = content;
             answer = 'Please refer to the original document for the complete answer.';
           }
@@ -406,15 +472,15 @@ async function createKnowledgeChunks(text: string): Promise<Array<{
         }
       }
       
-      // If we found good matches with this pattern, prefer it over others
-      if (chunks.length > totalMatches * 0.8) {
+      // If we found good matches with this pattern, use them
+      if (chunks.length > 0) {
         console.log(`Using pattern ${pattern.type} as primary extraction method`);
         break;
       }
     }
   }
   
-  // Fallback: if no Q&A patterns found, split by paragraphs
+  // Fallback: split by paragraphs if no Q&A patterns found
   if (chunks.length === 0) {
     console.log('No Q&A patterns found, splitting by paragraphs...');
     
@@ -422,7 +488,7 @@ async function createKnowledgeChunks(text: string): Promise<Array<{
       .split(/\n\s*\n/)
       .filter(p => p.trim().length > 50);
     
-    for (let i = 0; i < paragraphs.length; i++) {
+    for (let i = 0; i < Math.min(paragraphs.length, 10); i++) {
       const paragraph = cleanText(paragraphs[i]);
       if (paragraph.length > 20) {
         const category = determineCategory(paragraph);
