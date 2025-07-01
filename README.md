@@ -198,24 +198,6 @@ The system uses a comprehensive PostgreSQL schema with the following key tables:
 - **Notifications**: Real-time notification system
 - **Audit & Logging**: Comprehensive activity tracking
 
-## 🔧 Available Scripts
-
-- `bun dev` - Start development server
-- `bun build` - Build for production
-- `bun build:dev` - Build for development
-- `bun lint` - Run ESLint
-- `bun preview` - Preview production build
-
-## 🔮 Roadmap
-
-- [ ] Mobile application support
-- [ ] Advanced workflow automation
-- [ ] Integration with popular CRM systems
-- [ ] Multi-language support
-- [ ] Advanced AI capabilities (sentiment analysis, auto-resolution)
-- [ ] Custom dashboard widgets
-- [ ] API for third-party integrations
-
 ---
 
 Built with ❤️ using React, TypeScript, and Supabase
